@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tariq-AgentOS - Financial AI Agent & WhatsApp Sync</title>
+    <meta name="description" content="Tariq-AgentOS: Autonomous multi-task Agent OS with specialized Financial Agent, Telegram Bots & Topics API integration, and real-time synchronized intelligence." />
+    <meta property="og:title" content="Tariq-AgentOS - Financial AI Agent & WhatsApp Sync" />
+    <meta property="og:description" content="Tariq-AgentOS: Autonomous multi-task Agent OS with specialized Financial Agent, Telegram Bots & Topics API integration, and real-time synchronized intelligence." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Ignore Vite HMR / WebSocket transport errors as per environment constraints
+      (function() {
+        if (typeof window === 'undefined') return;
+
+        window.addEventListener('error', function(e) {
+          var msg = (e && (e.message || (e.error && e.error.message))) || '';
+          var fn = (e && e.filename) || '';
+          if (
+            msg.includes('WebSocket') ||
+            msg.includes('createWebSocketModuleRunnerTransport') ||
+            fn.includes('@vite/client') ||
+            (e.error && e.error.stack && e.error.stack.includes('createWebSocketModuleRunnerTransport'))
+          ) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = (e && e.reason && (e.reason.message || e.reason.stack || String(e.reason))) || '';
+          if (
+            reason.includes('WebSocket') ||
+            reason.includes('createWebSocketModuleRunnerTransport') ||
+            reason.includes('@vite/client')
+          ) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+        }, true);
+
+        if (window.WebSocket) {
+          var NativeWebSocket = window.WebSocket;
+          window.WebSocket = function(url, protocols) {
+            try {
+              var ws = new NativeWebSocket(url, protocols);
+              ws.addEventListener('error', function(err) {
+                if (err && err.stopImmediatePropagation) err.stopImmediatePropagation();
+              });
+              return ws;
+            } catch (err) {
+              return {
+                addEventListener: function() {},
+                removeEventListener: function() {},
+                send: function() {},
+                close: function() {},
+                readyState: 3
+              };
+            }
+          };
+          window.WebSocket.prototype = NativeWebSocket.prototype;
+        }
+      })();
+    </script>
+  </head>
+  <body class="bg-slate-950 text-slate-100 antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

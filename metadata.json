@@ -1,0 +1,6 @@
+{
+  "name": "Tariq-AgentOS - Financial AI Agent & WhatsApp Sync",
+  "description": "Tariq-AgentOS: Autonomous multi-task Agent OS with specialized Financial Agent, Telegram Bots & Topics API integration, and real-time synchronized intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
