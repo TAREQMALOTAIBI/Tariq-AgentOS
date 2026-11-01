@@ -274,16 +274,17 @@ export function parseFinancialInput(input: string): ParsedFinancialIntent {
 /**
  * Calculates budget status and threshold warnings
  */
-export function calculateBudgetStatus(
-  budget: { category: string; allocated: number; spent: number },
+export function calculateBudgetStatus<T extends { category: string; allocated: number; spent: number }>(
+  budget: T,
   thresholdPercentage = 85
-): BudgetStatus {
+): T & BudgetStatus {
   const remaining = Math.max(0, budget.allocated - budget.spent);
   const percentageUsed = budget.allocated > 0 ? (budget.spent / budget.allocated) * 100 : 0;
   const isOverBudget = budget.spent > budget.allocated;
   const isNearThreshold = percentageUsed >= thresholdPercentage && !isOverBudget;
 
   return {
+    ...budget,
     category: budget.category,
     allocated: budget.allocated,
     spent: budget.spent,

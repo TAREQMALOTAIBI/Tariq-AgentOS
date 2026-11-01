@@ -4,10 +4,8 @@ import { CockpitView } from './components/CockpitView';
 import { AgentRegistryView } from './components/AgentRegistryView';
 import { AgentChatView } from './components/AgentChatView';
 import { TelegramSimulatorView } from './components/TelegramSimulatorView';
-import { FinancialLedgerView } from './components/FinancialLedgerView';
 import { ApiKeysView } from './components/ApiKeysView';
 import { TasksQueueView } from './components/TasksQueueView';
-import { AddTransactionModal } from './components/AddTransactionModal';
 import { NewKeyModal } from './components/NewKeyModal';
 import { StageAgentModal } from './components/StageAgentModal';
 
@@ -52,9 +50,15 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<SystemAuditLog[]>([]);
 
   // Modals
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isNewKeyModalOpen, setIsNewKeyModalOpen] = useState(false);
   const [isStageModalOpen, setIsStageModalOpen] = useState(false);
+
+  // Fallback if ledger was active
+  useEffect(() => {
+    if (activeTab === 'ledger') {
+      setActiveTab('cockpit');
+    }
+  }, [activeTab]);
 
   // Fetch all live state from backend
   const fetchAllData = useCallback(async (silent = false) => {
@@ -126,26 +130,6 @@ export default function App() {
   }, [fetchAllData]);
 
   // Actions
-  const handleAddTransaction = async (data: {
-    type: 'expense' | 'income';
-    amount: number;
-    currency: string;
-    category: string;
-    merchantOrParty: string;
-    description: string;
-  }) => {
-    const res = await fetch('/api/financial/transaction', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, source: 'web_frontend' }),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'فشل حفظ القيد');
-    }
-    await fetchAllData(true);
-  };
-
   const handleGenerateKey = async (name: string, scopes: string[]) => {
     const res = await fetch('/api/keys', {
       method: 'POST',
@@ -205,8 +189,7 @@ export default function App() {
             transactions={transactions}
             messages={messages}
             onNavigateTab={setActiveTab}
-            onOpenAddModal={() => setIsAddModalOpen(true)}
-            onRunAudit={() => setActiveTab('agent_chat')}
+            onRunAudit={() => setActiveTab('telegram_gateway')}
           />
         )}
 
@@ -218,27 +201,12 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'agent_chat' && (
-          <AgentChatView
-            onTransactionCreated={() => fetchAllData(true)}
-            onNavigateTab={setActiveTab}
-          />
-        )}
-
-        {(activeTab === 'telegram_gateway' || activeTab === 'whatsapp_gateway') && (
+        {(activeTab === 'telegram_gateway' || activeTab === 'whatsapp_gateway' || activeTab === 'agent_chat') && (
           <TelegramSimulatorView
             apiKeys={apiKeys}
             messages={messages}
             onMessageSent={() => fetchAllData(true)}
             onNavigateTab={setActiveTab}
-          />
-        )}
-
-        {activeTab === 'ledger' && (
-          <FinancialLedgerView
-            transactions={transactions}
-            budgets={budgets}
-            onOpenAddModal={() => setIsAddModalOpen(true)}
           />
         )}
 
@@ -260,12 +228,6 @@ export default function App() {
       </main>
 
       {/* Modals */}
-      <AddTransactionModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSubmit={handleAddTransaction}
-      />
-
       <NewKeyModal
         isOpen={isNewKeyModalOpen}
         onClose={() => setIsNewKeyModalOpen(false)}

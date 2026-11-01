@@ -258,6 +258,19 @@ export function createTelegramClickUrl(botUsername: string, startParam?: string)
 }
 
 /**
+ * Generates a native Telegram Desktop / Mobile deep link (tg://resolve?domain=...)
+ * Opens the Telegram application directly on the user's device without staying in the browser
+ */
+export function createTelegramNativeAppUrl(botUsername: string, startParam?: string): string {
+  const cleanUsername = botUsername.replace(/^@/, '').trim();
+  if (!cleanUsername) return 'tg://';
+  if (startParam && startParam.trim()) {
+    return `tg://resolve?domain=${cleanUsername}&start=${encodeURIComponent(startParam.trim())}`;
+  }
+  return `tg://resolve?domain=${cleanUsername}`;
+}
+
+/**
  * Legacy helper retained for backward compatibility
  */
 export function createWhatsAppClickUrl(phoneNumber: string, prefillText: string): string {
@@ -293,11 +306,11 @@ export interface TelegramAgentPreset {
 export const TELEGRAM_AGENT_PRESETS: TelegramAgentPreset[] = [
   {
     id: 'fin-agent-01',
-    name: 'الوكيل المالي (FinOS Bot)',
-    nameEn: 'FinOS Financial Bot',
+    name: 'وكيل التحليل المالي (@yosef0bot)',
+    nameEn: 'Financial Analysis Bot (@yosef0bot)',
     avatar: '💼',
     specialty: 'finance',
-    botUsername: 'TariqFin_Bot',
+    botUsername: 'yosef0bot',
     topicThreadId: 101,
     topicName: 'المالية والمصروفات',
     prefix: '#مالية',

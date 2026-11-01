@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Bot, 
   TrendingUp, 
@@ -12,11 +12,13 @@ import {
   Zap, 
   ShieldCheck, 
   Send,
-  MessageSquare
+  MessageSquare,
+  Sparkles
 } from 'lucide-react';
 import type { AgentProfile, FinancialTransaction, SyncedMessage } from '../types/index';
 import { CATEGORY_LABELS_AR } from '../utils/finance-engine';
 import { formatSafeTime } from '../utils/formatters';
+import { FabricPatternModal } from './FabricPatternModal';
 
 interface CockpitViewProps {
   agents: AgentProfile[];
@@ -30,7 +32,6 @@ interface CockpitViewProps {
   transactions: FinancialTransaction[];
   messages: SyncedMessage[];
   onNavigateTab: (tab: string) => void;
-  onOpenAddModal: () => void;
   onRunAudit: () => void;
 }
 
@@ -40,9 +41,9 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
   transactions,
   messages,
   onNavigateTab,
-  onOpenAddModal,
   onRunAudit,
 }) => {
+  const [isFabricModalOpen, setIsFabricModalOpen] = useState(false);
   const finAgent = agents.find((a) => a.specialty === 'finance') || agents[0];
   const otherAgents = agents.filter((a) => a.id !== finAgent?.id);
 
@@ -67,7 +68,15 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIsFabricModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-500/40 text-xs font-bold transition-all shadow-md shadow-purple-900/20 cursor-pointer"
+            title="عرض ونسخ نمط Fabric للتحليل المالي"
+          >
+            <Sparkles className="w-4 h-4 text-purple-300" />
+            <span>📜 نمط Fabric المالي</span>
+          </button>
           <button
             onClick={() => onNavigateTab('agents_registry')}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
@@ -83,11 +92,11 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             <span>بوابة بوتات تليجرام</span>
           </button>
           <button
-            onClick={onOpenAddModal}
+            onClick={() => onNavigateTab('tasks')}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
           >
-            <ArrowUpRight className="w-4 h-4" />
-            <span>تسجيل معاملة يدوية</span>
+            <Clock className="w-4 h-4 text-emerald-400" />
+            <span>طابور المهام والجدولة</span>
           </button>
         </div>
       </div>
@@ -214,13 +223,15 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
               <span className="text-[10px] text-slate-400 block">متوسط الاستجابة</span>
               <strong className="text-sm font-bold text-cyan-400 font-mono">{finAgent?.metrics.avgLatencyMs}ms</strong>
             </div>
-            <button
-              onClick={() => onNavigateTab('agent_chat')}
-              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-emerald-500/20 whitespace-nowrap"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>محادثة الوكيل</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <a
+                href={`tg://resolve?domain=${finAgent?.telegramBotUsername || 'yosef0bot'}&start=agent_finance`}
+                className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-sky-500/20 whitespace-nowrap"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>فتح محادثة الوكيل في تليجرام</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -302,10 +313,10 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
             <span className="text-xs text-slate-400">التزامن آمن 100% ومشفر باستخدام مفاتيح API المعتمدة</span>
             <button
-              onClick={() => onNavigateTab('ledger')}
-              className="text-xs text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1 cursor-pointer"
+              onClick={() => onNavigateTab('telegram_gateway')}
+              className="text-xs text-sky-400 hover:text-sky-300 font-medium flex items-center gap-1 cursor-pointer"
             >
-              <span>عرض الدفتر الكامل</span>
+              <span>فتح بوابة تليجرام</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -382,6 +393,13 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Fabric Financial Analysis Pattern Modal */}
+      <FabricPatternModal
+        isOpen={isFabricModalOpen}
+        onClose={() => setIsFabricModalOpen(false)}
+      />
     </div>
   );
 };
+

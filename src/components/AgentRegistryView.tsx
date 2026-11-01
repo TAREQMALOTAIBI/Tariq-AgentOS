@@ -333,20 +333,13 @@ export const AgentRegistryView: React.FC<AgentRegistryViewProps> = ({
 
               {/* Bottom Actions */}
               <div className="pt-4 border-t border-slate-800/80 mt-4 flex items-center justify-between gap-2 relative z-10">
-                {isActive ? (
-                  <button
-                    onClick={() => onNavigateTab(ag.specialty === 'finance' ? 'agent_chat' : 'cockpit')}
-                    className="w-full py-2 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/20"
-                  >
-                    <span>فتح محادثة الوكيل المالي</span>
-                    <ArrowRight className="w-3.5 h-3.5 rotate-180" />
-                  </button>
-                ) : (
-                  <div className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
-                    <span>مجدول للإضافة والتفعيل لاحقاً</span>
-                    <span className="text-amber-400 font-medium">المرحلة 2</span>
-                  </div>
-                )}
+                <a
+                  href={`tg://resolve?domain=yosef0bot&start=agent_${ag.specialty}`}
+                  className="w-full py-2 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-sky-500/20"
+                >
+                  <span>فتح محادثة الوكيل في تليجرام</span>
+                  <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                </a>
               </div>
             </div>
           );

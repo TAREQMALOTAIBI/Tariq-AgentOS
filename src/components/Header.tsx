@@ -37,10 +37,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const tabs = [
     { id: 'cockpit', label: 'لوحة التحكم OS', icon: Terminal },
+    { id: 'telegram_gateway', label: 'المحادثة في تطبيق تليجرام', icon: Send, badge: 'Native App' },
     { id: 'agents_registry', label: 'سجل الوكلاء والتوسع', icon: Bot, badge: 'Roadmap' },
-    { id: 'agent_chat', label: 'الوكيل المالي (FinOS)', icon: Sparkles, badge: 'Active' },
-    { id: 'telegram_gateway', label: 'بوابة بوتات تليجرام', icon: Send, badge: 'Telegram' },
-    { id: 'ledger', label: 'الدفاتر والميزانيات', icon: DollarSign },
     { id: 'tasks', label: 'طابور المهام', icon: Layers },
     { id: 'security_keys', label: 'مفاتيح API والأمان', icon: Key },
   ];
@@ -96,14 +94,11 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-white tracking-tight">Tariq-AgentOS | نظام تشغيل الوكلاء المتعددين</h1>
+              <h1 className="text-lg font-bold text-white tracking-tight">Tariq-AgentOS</h1>
               <span className="px-2 py-0.5 text-[10px] uppercase font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
                 Tariq OS
               </span>
             </div>
-            <p className="text-xs text-slate-400">
-              منظومة وكلاء ذكاء اصطناعي لإدارة المهام المتعددة • نبدأ بالوكيل المالي مع جاهزية تامة للتوسع للتسويق والمبيعات لاحقاً
-            </p>
           </div>
         </div>
 
