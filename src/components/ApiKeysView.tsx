@@ -214,7 +214,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({
                   <td className="py-2.5 px-3">
                     <span
                       className={`text-[10px] px-1.5 py-0.2 rounded font-bold uppercase font-sans ${
-                        log.channel === 'whatsapp' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
+                        log.channel === 'telegram' ? 'bg-sky-500/20 text-sky-300' : 'bg-blue-500/20 text-blue-300'
                       }`}
                     >
                       {log.channel}

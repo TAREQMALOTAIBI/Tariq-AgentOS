@@ -105,7 +105,7 @@ export const TelegramSimulatorView: React.FC<TelegramSimulatorProps> = ({
 
   const activeBotUsername = connectedBots[0]?.botUsername || 'yosef0bot';
   const telegramSyncedLogs = messages.filter(
-    (m) => (m.channel === 'telegram' || m.channel === 'whatsapp') && !m.sender.isAgent
+    (m) => m.channel === 'telegram' && !m.sender.isAgent
   );
 
   return (
@@ -149,11 +149,11 @@ export const TelegramSimulatorView: React.FC<TelegramSimulatorProps> = ({
             <span>📤 إرسال الملخص المالي إلى تليجرام</span>
           </button>
           <button
-            onClick={() => onNavigateTab('ledger')}
+            onClick={() => onNavigateTab('tasks')}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
           >
             <Layers className="w-4 h-4 text-emerald-400" />
-            <span>الدفاتر المالية</span>
+            <span>طابور المهام</span>
           </button>
         </div>
       </div>
@@ -330,10 +330,10 @@ export const TelegramSimulatorView: React.FC<TelegramSimulatorProps> = ({
               </div>
 
               <button
-                onClick={() => onNavigateTab('ledger')}
-                className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5 shrink-0 cursor-pointer"
+                onClick={() => onNavigateTab('tasks')}
+                className="text-[11px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 shrink-0 cursor-pointer"
               >
-                <span>الدفتر</span>
+                <span>المهام</span>
                 <ArrowUpRight className="w-3 h-3" />
               </button>
             </div>

@@ -333,7 +333,7 @@ export function calculateCashFlowMetrics(
 }
 
 /**
- * API Key generator for WhatsApp webhook verification
+ * API Key generator for Telegram webhook verification
  */
 export function generateApiKey(prefix = 'agt_live_'): string {
   const randomChars = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -341,7 +341,7 @@ export function generateApiKey(prefix = 'agt_live_'): string {
 }
 
 /**
- * Validates incoming Bearer token from WhatsApp
+ * Validates incoming Bearer token from Telegram webhook
  */
 export function validateApiKey(incomingHeader: string | undefined, validKeys: string[]): boolean {
   if (!incomingHeader) return false;

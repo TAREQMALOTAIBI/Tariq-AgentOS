@@ -129,7 +129,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             </div>
             <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
               <Clock className="w-3.5 h-3.5" />
-              <span>آخر مصروف: منذ دقائق عبر واتساب</span>
+              <span>آخر قيد: منذ لحظات عبر تليجرام</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
@@ -259,12 +259,12 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
                 <div className="flex items-start gap-3">
                   <div
                     className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 ${
-                      msg.channel === 'telegram' || msg.channel === 'whatsapp'
+                      msg.channel === 'telegram'
                         ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
                         : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                     }`}
                   >
-                    {msg.channel === 'telegram' || msg.channel === 'whatsapp' ? <Send className="w-3.5 h-3.5" /> : <Bot className="w-4 h-4" />}
+                    {msg.channel === 'telegram' ? <Send className="w-3.5 h-3.5" /> : <Bot className="w-4 h-4" />}
                   </div>
 
                   <div>
@@ -272,12 +272,12 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
                       <span className="text-xs font-bold text-slate-200">{msg.sender.name}</span>
                       <span
                         className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${
-                          msg.channel === 'telegram' || msg.channel === 'whatsapp'
+                          msg.channel === 'telegram'
                             ? 'bg-sky-500/20 text-sky-300'
                             : 'bg-blue-500/20 text-blue-300'
                         }`}
                       >
-                        {msg.channel === 'telegram' || msg.channel === 'whatsapp' ? 'تليجرام' : 'واجهة الويب'}
+                        {msg.channel === 'telegram' ? 'تليجرام' : 'واجهة الويب'}
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono">
                         {formatSafeTime(msg.timestamp)}

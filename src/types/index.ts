@@ -41,7 +41,7 @@ export interface AgentRoutingResult {
 }
 
 export type TransactionType = 'expense' | 'income' | 'transfer';
-export type TransactionSource = 'telegram' | 'web_frontend' | 'api_webhook' | 'whatsapp';
+export type TransactionSource = 'telegram' | 'web_frontend' | 'api_webhook';
 export type TransactionStatus = 'cleared' | 'pending' | 'flagged';
 
 export interface FinancialTransaction {
@@ -87,7 +87,7 @@ export interface ApiKeyItem {
 export interface SyncedMessage {
   id: string;
   timestamp: string;
-  channel: 'telegram' | 'web' | 'whatsapp';
+  channel: 'telegram' | 'web';
   sender: {
     name: string;
     handle: string; // telegram handle (@user), chat ID or email
@@ -129,7 +129,7 @@ export interface AgentTask {
 export interface SystemAuditLog {
   id: string;
   timestamp: string;
-  channel: 'telegram' | 'web' | 'api' | 'whatsapp';
+  channel: 'telegram' | 'web' | 'api';
   event: string;
   ip: string;
   status: 'success' | 'warning' | 'error';

@@ -204,7 +204,7 @@ const agentsStore: AgentProfile[] = [
     nameEn: 'Security & API Guardian',
     role: 'التدقيق الأمني والتحقق من التوقيع والمفاتيح',
     roleEn: 'Security Audit & API Verification',
-    description: 'يتحقق من هوية مرسلي الواتساب وتدقيق طلبات الـ Webhook والتوقيعات الرقمية ومفاتيح الـ API.',
+    description: 'يتحقق من هوية مرسلي تليجرام وتدقيق طلبات الـ Webhook والتوقيعات الرقمية ومفاتيح الـ API.',
     status: 'active',
     avatar: '🛡️',
     isSpecialist: false,
@@ -450,11 +450,11 @@ const auditLogsStore: SystemAuditLog[] = [
   {
     id: 'log-1',
     timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    channel: 'whatsapp',
+    channel: 'telegram',
     event: 'Webhook Auth & Transaction Processed',
     ip: '185.199.108.153',
     status: 'success',
-    tokenUsed: 'agt_live_wa_99a8...b1c0',
+    tokenUsed: 'agt_live_tg_99a8...b1c0',
     latencyMs: 18,
   },
   {
@@ -604,7 +604,7 @@ app.post('/api/financial/transaction', (req, res) => {
   auditLogsStore.unshift({
     id: `log-${Date.now()}`,
     timestamp: new Date().toISOString(),
-    channel: newTx.source === 'whatsapp' ? 'whatsapp' : 'web',
+    channel: newTx.source === 'telegram' ? 'telegram' : 'web',
     event: `Transaction Created: ${newTx.type} ${newTx.amount} ${newTx.currency}`,
     ip: req.ip || '127.0.0.1',
     status: 'success',
@@ -627,7 +627,7 @@ app.get('/api/messages', (req, res) => {
 });
 
 // Helper function to handle incoming channel updates (Telegram First)
-async function handleChannelWebhook(req: express.Request, res: express.Response, channel: 'telegram' | 'whatsapp') {
+async function handleChannelWebhook(req: express.Request, res: express.Response, channel: 'telegram') {
   const startTime = Date.now();
   const authHeader = req.headers.authorization;
   const validKeyStrings = apiKeysStore
@@ -1665,10 +1665,6 @@ app.post('/api/telegram/webhook', async (req, res) => {
   await handleChannelWebhook(req, res, 'telegram');
 });
 
-// Fallback alias for backward-compatibility
-app.post('/api/whatsapp/webhook', async (req, res) => {
-  await handleChannelWebhook(req, res, 'telegram');
-});
 
 // 6. Agent Frontend Chat (Web Console)
 app.post('/api/agent/chat', async (req, res) => {
@@ -1718,7 +1714,7 @@ app.post('/api/agent/chat', async (req, res) => {
       ? ` • استهلاك ميزانية ${catLabel}: ${Math.round((catBudget.spent / catBudget.allocated) * 100)}%`
       : '';
 
-    agentReply = `✅ تم تقييد المصروف بنجاح في النظام:\n• المبلغ: ${intent.amount.toLocaleString()} ${intent.currency}\n• التصنيف: ${catLabel}${budgetInfo}\n• تم مزامنة القيد عبر القنوات وسيكون مرئياً أيضاً في سجل واتساب والتقارير.`;
+    agentReply = `✅ تم تقييد المصروف بنجاح في النظام:\n• المبلغ: ${intent.amount.toLocaleString()} ${intent.currency}\n• التصنيف: ${catLabel}${budgetInfo}\n• تم مزامنة القيد وسيكون مرئياً في سجل تليجرام والتقارير.`;
   } else if (intent.action === 'record_income' && intent.amount) {
     createdTx = {
       id: `tx-${Date.now().toString(36)}`,
@@ -1751,7 +1747,7 @@ app.post('/api/agent/chat', async (req, res) => {
     agentReply = `📊 **حالة الميزانيات التشغيلية الحالية**:\n${list.join('\n')}\n\n*البيانات متزامنة آنياً مع جميع مصادر الدخل والمصروفات.*`;
   } else if (intent.action === 'query_summary') {
     const metrics = calculateCashFlowMetrics(transactionsStore);
-    agentReply = `💼 **تقرير الموقف المالي الشامل**:\n• إجمالي الإيرادات: **${metrics.totalIncome.toLocaleString()} ر.س**\n• إجمالي المصروفات: **${metrics.totalExpense.toLocaleString()} ر.س**\n• صافي التدفق المالي: **${metrics.netCashFlow.toLocaleString()} ر.س**\n• مؤشر الصحة المالية: **${metrics.healthScore}/100** 🟢\n• إجمالي القيود المالية: **${transactionsStore.length} معاملة**\n• حالة الربط مع الواتساب: **متصل ومفعل (Active Sync)**`;
+    agentReply = `💼 **تقرير الموقف المالي الشامل**:\n• إجمالي الإيرادات: **${metrics.totalIncome.toLocaleString()} ر.س**\n• إجمالي المصروفات: **${metrics.totalExpense.toLocaleString()} ر.س**\n• صافي التدفق المالي: **${metrics.netCashFlow.toLocaleString()} ر.س**\n• مؤشر الصحة المالية: **${metrics.healthScore}/100** 🟢\n• إجمالي القيود المالية: **${transactionsStore.length} معاملة**\n• حالة الربط مع تليجرام: **متصل ومفعل (Active Sync)**`;
   } else if (intent.action === 'audit_check') {
     const nearLimitBudgets = budgetsStore.filter((b) => (b.spent / b.allocated) >= 0.8);
     const warnings = nearLimitBudgets.map((b) => {
@@ -1849,7 +1845,7 @@ app.get('/api/keys', (req, res) => {
 });
 
 app.post('/api/keys', (req, res) => {
-  const { name = 'WhatsApp Webhook Key', scopes = ['whatsapp:receive', 'whatsapp:send', 'finance:read', 'finance:write'] } = req.body;
+  const { name = 'Telegram Webhook Key', scopes = ['telegram:receive', 'telegram:send', 'finance:read', 'finance:write'] } = req.body;
   const newSecret = generateApiKey();
   const preview = `${newSecret.substring(0, 14)}...${newSecret.substring(newSecret.length - 4)}`;
 

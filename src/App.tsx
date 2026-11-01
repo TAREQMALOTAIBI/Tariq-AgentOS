@@ -201,7 +201,7 @@ export default function App() {
           />
         )}
 
-        {(activeTab === 'telegram_gateway' || activeTab === 'whatsapp_gateway' || activeTab === 'agent_chat') && (
+        {(activeTab === 'telegram_gateway' || activeTab === 'agent_chat') && (
           <TelegramSimulatorView
             apiKeys={apiKeys}
             messages={messages}
