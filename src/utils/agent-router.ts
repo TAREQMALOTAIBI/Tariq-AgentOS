@@ -316,10 +316,11 @@ export const TELEGRAM_AGENT_PRESETS: TelegramAgentPreset[] = [
     prefix: '#مالية',
     commands: [
       { command: '/budget', description: 'عرض تفاصيل ومتبقي الميزانيات التشغيلية' },
-      { command: '/expense', description: 'تسجيل مصروف جديد (مثال: /expense 250 برمجيات)' },
+      { command: '/summary', description: 'ملخص التدفق النقدي وصافي السيولة' },
+      { command: '/expense', description: 'تسجيل مصروف جديد (مثال: /expense 250)' },
       { command: '/income', description: 'قيد إيراد أو تحصيل عقد (مثال: /income 15000)' },
-      { command: '/summary', description: 'ملخص التدفق النقدي وصافي الأرباح لهذا الشهر' },
       { command: '/vat', description: 'تدقيق ضريبة القيمة المضافة 15%' },
+      { command: '/fabric', description: 'تحليل استراتيجي بنمط Fabric المالي' },
     ],
     description: 'بوت مالي مستقل لتسجيل النفقات والفواتير والتحقق من الميزانية لحظياً عبر تليجرام.',
     sampleMessage: '/expense 420 خدمات سحابية وتجديد استضافة',

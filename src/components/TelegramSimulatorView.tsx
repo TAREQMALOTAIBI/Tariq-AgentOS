@@ -119,15 +119,15 @@ export const TelegramSimulatorView: React.FC<TelegramSimulatorProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base md:text-lg font-bold text-white">
-                وكلاء Tariq-AgentOS في تطبيق تليجرام
+                وكيل التحليل المالي في تطبيق تليجرام (@{activeBotUsername})
               </h2>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                متصل وجاهز للمحادثة المباشرة
+                محادثة مستقلة ومخصصة للمالية فقط
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1 leading-relaxed max-w-3xl">
-              اختر الوكيل المطلوب بالأسفل لفتح محادثته مباشرة في تطبيق تليجرام. جميع أوامرك المالية والتسويقية وعمليات المبيعات تُعالج داخل تليجرام وتنعكس تلقائياً في دفاتر النظام.
+              محادثة وكيل التحليل المالي (@{activeBotUsername}) تعمل بشكل مستقل ومخصص للعمليات والتحليلات المالية والتدفقات النقدية دون أي تداخل مع وكلاء التسويق أو المبيعات.
             </p>
           </div>
         </div>
@@ -164,60 +164,72 @@ export const TelegramSimulatorView: React.FC<TelegramSimulatorProps> = ({
         </div>
       )}
 
-      {/* Agents Cards Grid (Only the Agents) */}
+      {/* Agents Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {TELEGRAM_AGENT_PRESETS.map((preset) => {
-          const startParam = AGENT_START_PARAM[preset.id] || 'agent_finance';
-          const webUrl = createTelegramClickUrl(activeBotUsername, startParam);
-          const nativeUrl = createTelegramNativeAppUrl(activeBotUsername, startParam);
-          const showQr = showQrForPreset === preset.id;
+          const isFinancialAgent = preset.id === 'fin-agent-01';
+          const webUrl = isFinancialAgent ? `https://t.me/${activeBotUsername}` : '';
+          const nativeUrl = isFinancialAgent ? `tg://resolve?domain=${activeBotUsername}` : '';
+          const showQr = showQrForPreset === preset.id && isFinancialAgent;
 
           return (
             <div
               key={preset.id}
               onClick={() => setSelectedPresetId(preset.id)}
               className={`p-5 rounded-2xl border transition-all flex flex-col justify-between gap-4 ${
-                selectedPresetId === preset.id
+                isFinancialAgent
                   ? 'bg-slate-900/95 border-emerald-500/50 shadow-xl shadow-emerald-500/5'
-                  : 'bg-slate-900/80 border-slate-800 hover:border-sky-500/40'
+                  : 'bg-slate-900/60 border-slate-800 opacity-90'
               }`}
             >
               <div className="space-y-3.5">
                 {/* Card Header */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-2xl shrink-0">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0 ${
+                      isFinancialAgent 
+                        ? 'bg-emerald-500/15 border border-emerald-500/30' 
+                        : 'bg-slate-800 border border-slate-700'
+                    }`}>
                       {preset.avatar}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-sm font-bold text-white">{preset.name}</h3>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          🟢 متصل في تليجرام
-                        </span>
+                        {isFinancialAgent ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            🟢 البوت النشط (@{activeBotUsername})
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            ⏳ مجدول للمرحلة 2 (بوت مستقل)
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">{preset.role}</p>
                     </div>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowQrForPreset(showQr ? null : preset.id);
-                    }}
-                    className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
-                    title="رمز QR لفتح محادثة الوكيل على الجوال"
-                  >
-                    <QrCode className="w-4 h-4 text-sky-400" />
-                    <span>QR للجوال</span>
-                  </button>
+                  {isFinancialAgent && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowQrForPreset(showQr ? null : preset.id);
+                      }}
+                      className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+                      title="رمز QR لفتح محادثة الوكيل على الجوال"
+                    >
+                      <QrCode className="w-4 h-4 text-sky-400" />
+                      <span>QR للجوال</span>
+                    </button>
+                  )}
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">{preset.description}</p>
 
                 {/* QR Code Drawer for Mobile Telegram App */}
-                {showQr && (
-                  <div className="p-4 rounded-xl bg-slate-950 border border-sky-500/30 flex items-center gap-4">
+                {showQr && isFinancialAgent && (
+                  <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 flex items-center gap-4">
                     <img
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(webUrl)}`}
                       alt={`QR Code for ${preset.name}`}
@@ -225,69 +237,95 @@ export const TelegramSimulatorView: React.FC<TelegramSimulatorProps> = ({
                     />
                     <div className="space-y-1.5 text-xs">
                       <h4 className="font-bold text-white flex items-center gap-1.5">
-                        <Smartphone className="w-4 h-4 text-sky-400" />
-                        <span>امسح الرمز لفتح محادثة {preset.name}</span>
+                        <Smartphone className="w-4 h-4 text-emerald-400" />
+                        <span>امسح الرمز لفتح محادثة وكيل التحليل المالي</span>
                       </h4>
                       <p className="text-slate-400 text-[11px] leading-relaxed">
-                        يفتح هذا الرمز تطبيق تليجرام على هاتفك ويبدأ المحادثة مباشرة مع <strong>{preset.name}</strong>.
+                        يفتح هذا الرمز تطبيق تليجرام على هاتفك مباشرة في محادثة <strong>@{activeBotUsername}</strong> المستقلة للتحليل المالي.
                       </p>
                     </div>
                   </div>
                 )}
 
                 {/* Commands to use inside Telegram */}
-                <div className="space-y-1.5">
-                  <span className="text-[11px] text-slate-400 block font-medium">
-                    أوامر الوكيل السريعة داخل تليجرام (اضغط لنسخ الأمر):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {preset.commands.map((cmd) => {
-                      const cmdKey = `${preset.id}-${cmd.command}`;
-                      return (
-                        <button
-                          key={cmd.command}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCopy(cmdKey, cmd.command);
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-sky-950/80 border border-slate-800 hover:border-sky-500/40 text-[11px] font-mono text-sky-300 flex items-center gap-1.5 transition-all cursor-pointer"
-                          title={cmd.description}
-                        >
-                          <span>{cmd.command}</span>
-                          {copiedId === cmdKey ? (
-                            <Check className="w-3 h-3 text-emerald-400" />
-                          ) : (
-                            <Copy className="w-2.5 h-2.5 text-slate-500" />
-                          )}
-                        </button>
-                      );
-                    })}
+                {isFinancialAgent ? (
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-slate-400 block font-medium">
+                      أوامر الوكيل المالي المباشرة (اضغط لنسخ الأمر):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {preset.commands.map((cmd) => {
+                        const cmdKey = `${preset.id}-${cmd.command}`;
+                        return (
+                          <button
+                            key={cmd.command}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopy(cmdKey, cmd.command);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-950 hover:bg-emerald-950/80 border border-slate-800 hover:border-emerald-500/40 text-[11px] font-mono text-emerald-300 flex items-center gap-1.5 transition-all cursor-pointer"
+                            title={cmd.description}
+                          >
+                            <span>{cmd.command}</span>
+                            {copiedId === cmdKey ? (
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-2.5 h-2.5 text-slate-500" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-400 space-y-1">
+                    <div className="font-bold text-slate-300 flex items-center gap-1.5">
+                      <span>🔒 استقلالية تامة للمحادثة</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-slate-400">
+                      سيكون لهذا الوكيل بوت تليجرام وتوكن خاص به عند تفعيله في المرحلة الثانية، ولن يتم دمجه أو خلط محادثته مع محادثة وكيل التحليل المالي.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Direct Launch Buttons in Telegram App */}
-              <div className="pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <a
-                  href={nativeUrl}
-                  onClick={(e) => e.stopPropagation()}
-                  className="py-2.5 px-3.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold flex items-center justify-center gap-2 transition-all shadow-lg shadow-sky-500/20"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>فتح محادثة الوكيل في تليجرام</span>
-                </a>
+              {isFinancialAgent ? (
+                <div className="pt-3 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <a
+                    href={nativeUrl}
+                    onClick={(e) => e.stopPropagation()}
+                    className="py-2.5 px-3.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold flex items-center justify-center gap-2 transition-all shadow-lg shadow-sky-500/20"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>فتح محادثة الوكيل المالي في تليجرام</span>
+                  </a>
 
-                <a
-                  href={webUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="py-2.5 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold flex items-center justify-center gap-2 border border-slate-700 transition-all"
-                >
-                  <span>فتح عبر الرابط المباشر (t.me)</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-sky-400" />
-                </a>
-              </div>
+                  <a
+                    href={webUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="py-2.5 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold flex items-center justify-center gap-2 border border-slate-700 transition-all"
+                  >
+                    <span>فتح عبر الرابط المباشر (@{activeBotUsername})</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-sky-400" />
+                  </a>
+                </div>
+              ) : (
+                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                  <span>المرحلة الثانية • بوت مستقل</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNavigateTab('agents_registry');
+                    }}
+                    className="text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
+                  >
+                    عرض في سجل الوكلاء ←
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

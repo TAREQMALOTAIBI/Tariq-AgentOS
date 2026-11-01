@@ -1,22 +1,16 @@
 import React, { useState } from 'react';
 import { 
   Bot, 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet, 
   Activity, 
-  Smartphone, 
   CheckCircle2, 
   Clock, 
   ArrowUpRight, 
   Zap, 
   ShieldCheck, 
   Send,
-  MessageSquare,
   Sparkles
 } from 'lucide-react';
 import type { AgentProfile, FinancialTransaction, SyncedMessage } from '../types/index';
-import { CATEGORY_LABELS_AR } from '../utils/finance-engine';
 import { formatSafeTime } from '../utils/formatters';
 import { FabricPatternModal } from './FabricPatternModal';
 
@@ -98,78 +92,6 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             <Clock className="w-4 h-4 text-emerald-400" />
             <span>طابور المهام والجدولة</span>
           </button>
-        </div>
-      </div>
-
-      {/* Financial KPIs Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Income */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between hover:border-slate-700 transition-all">
-          <div>
-            <span className="text-xs text-slate-400 font-medium">إجمالي الإيرادات المحصلة</span>
-            <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">
-              +{metrics.totalIncome.toLocaleString()} <span className="text-xs font-sans">ر.س</span>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-emerald-500 mt-1">
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>معدل الادخار: {metrics.savingsRate}%</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Total Expenses */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between hover:border-slate-700 transition-all">
-          <div>
-            <span className="text-xs text-slate-400 font-medium">إجمالي المصروفات والنفقات</span>
-            <div className="text-xl font-bold text-rose-400 mt-1 font-mono">
-              -{metrics.totalExpense.toLocaleString()} <span className="text-xs font-sans">ر.س</span>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
-              <Clock className="w-3.5 h-3.5" />
-              <span>آخر قيد: منذ لحظات عبر تليجرام</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
-            <TrendingDown className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Net Cashflow */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between hover:border-slate-700 transition-all">
-          <div>
-            <span className="text-xs text-slate-400 font-medium">صافي التدفق المالي (Cashflow)</span>
-            <div className={`text-xl font-bold mt-1 font-mono ${metrics.netCashFlow >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {metrics.netCashFlow >= 0 ? '+' : ''}{metrics.netCashFlow.toLocaleString()} <span className="text-xs font-sans">ر.س</span>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>دفاتر مطابقة ومتوازنة</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
-            <Wallet className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Financial Health Score */}
-        <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between hover:border-slate-700 transition-all">
-          <div>
-            <span className="text-xs text-slate-400 font-medium">مؤشر الاستقرار المالي الآلي</span>
-            <div className="text-xl font-bold text-white mt-1 flex items-baseline gap-1 font-mono">
-              <span className="text-emerald-400">{metrics.healthScore}</span>
-              <span className="text-xs text-slate-400 font-sans">/ 100</span>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-emerald-400 mt-1">
-              <Activity className="w-3.5 h-3.5" />
-              <span>وضع تشغيلي ممتاز وآمن</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
         </div>
       </div>
 
