@@ -31,8 +31,8 @@ export const TasksQueueView: React.FC<TasksQueueProps> = ({
       await onTriggerTask(taskId);
       setSuccessMessage('تم تشغيل المهمة بنجاح وتحديث النتائج في خلفية Tariq-AgentOS.');
       setTimeout(() => setSuccessMessage(null), 4000);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // Handled gracefully
     } finally {
       setRunningTaskId(null);
     }

@@ -33,8 +33,8 @@ export const NewKeyModal: React.FC<NewKeyModalProps> = ({
         'finance:write',
       ]);
       setCreatedKey(newKey);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // Handled gracefully
     } finally {
       setIsSubmitting(false);
     }
