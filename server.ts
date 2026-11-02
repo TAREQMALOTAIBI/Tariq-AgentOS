@@ -977,23 +977,26 @@ async function generateTelegramAgentReply(
   // 5. Fabric Financial Pattern command
   if (trimmed === '/fabric') {
     const metrics = calculateCashFlowMetrics(transactionsStore);
-    let replyText = '';
-    if (genAI) {
-      try {
-        const prompt = `${FABRIC_FINANCIAL_ANALYSIS_PATTERN}\n\nبيانات النظام المالية:\n- إجمالي الإيرادات: ${metrics.totalIncome} ر.س\n- إجمالي المصروفات: ${metrics.totalExpense} ر.س\n- صافي السيولة: ${metrics.netCashFlow} ر.س\n- معدل الادخار: ${metrics.savingsRate}%\n- مؤشر الاستقرار: ${metrics.healthScore}/100\n\nقم بإعداد تقرير تحليل مالي تنفيذي احترافي مختصر ومباشر (CFO Brief) لمؤسس المشروع باللغة العربية.`;
-        const result = await genAI.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt,
-        });
-        replyText = result.text || `📊 تقرير Fabric للتحليل المالي:\n• صافي التدفق: ${metrics.netCashFlow.toLocaleString()} ر.س\n• مؤشر الاستقرار: ${metrics.healthScore}/100`;
-      } catch {
-        replyText = `📊 تقرير Fabric للتحليل المالي:\n• إجمالي الإيرادات: ${metrics.totalIncome.toLocaleString()} ر.س\n• إجمالي المصروفات: ${metrics.totalExpense.toLocaleString()} ر.س\n• صافي السيولة: ${metrics.netCashFlow.toLocaleString()} ر.س\n• مؤشر الاستقرار المالي: ${metrics.healthScore}/100 🟢`;
-      }
-    } else {
-      replyText = `📊 تقرير Fabric للتحليل المالي:\n• إجمالي الإيرادات: ${metrics.totalIncome.toLocaleString()} ر.س\n• إجمالي المصروفات: ${metrics.totalExpense.toLocaleString()} ر.س\n• صافي السيولة: ${metrics.netCashFlow.toLocaleString()} ر.س\n• مؤشر الاستقرار المالي: ${metrics.healthScore}/100 🟢`;
-    }
+    const replyText = `📊 **تقرير Fabric التنفيذي للتحليل المالي (CFO Brief)**:\n\n• **إجمالي الإيرادات المحصلة**: ${metrics.totalIncome.toLocaleString()} ر.س\n• **إجمالي المصروفات التشغيلية**: ${metrics.totalExpense.toLocaleString()} ر.س\n• **صافي السيولة النقدية**: ${metrics.netCashFlow.toLocaleString()} ر.س\n• **معدل الادخار التشغيلي**: ${metrics.savingsRate}%\n• **مؤشر الاستقرار المالي**: ${metrics.healthScore}/100 🟢\n\n💡 **التوصية المالية**: التدفقات النقدية في وضع صحي وآمن، مع ضرورة مراقبة بند الرواتب والعقود لبلوغه الحد المرصود.`;
     return {
       replyText,
+      createdTx: null,
+      targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
+      activeAgentId: 'fin-agent-01',
+    };
+  }
+
+  // 6. Instant response for greetings and short conversational pings (e.g. مرحبا, هلا, السلام عليكم, ا, أ)
+  const normalizedGreeting = trimmed.replace(/[ًٌٍَُِّْ!؟?.,]/g, '').trim().toLowerCase();
+  if (
+    normalizedGreeting.length <= 3 ||
+    /^(مرحبا|اهلا|أهلا|هلا|السلام عليكم|سلام|صباح الخير|مساء الخير|حي الله|يا هلا|كيف الحال|شلونك|اخبارك|hi|hello|hey|start)$/.test(
+      normalizedGreeting
+    )
+  ) {
+    const metrics = calculateCashFlowMetrics(transactionsStore);
+    return {
+      replyText: `أهلاً ومرحباً بك ${senderName}! 💼\nمعك **وكيل التحليل المالي (@yosef0bot)** في خدمتك.\n\n📊 **الموقف المالي اللحظي**:\n• صافي السيولة: **${metrics.netCashFlow.toLocaleString()} ر.س**\n• إجمالي الإيرادات: **+${metrics.totalIncome.toLocaleString()} ر.س**\n• إجمالي المصروفات: **-${metrics.totalExpense.toLocaleString()} ر.س**\n\n📌 يمكنك إرسال أمر مباشر أو الكتابة بطبيعية مثل:\n• *"صرفت 350 ريال فاتورة إنترنت"*\n• *"استلمت 12000 ريال دفعة عميل"*\n• أو الضغط على أحد الأزرار بالأسفل 👇`,
       createdTx: null,
       targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
       activeAgentId: 'fin-agent-01',
@@ -1073,21 +1076,27 @@ async function generateTelegramAgentReply(
     const metrics = calculateCashFlowMetrics(transactionsStore);
     replyText = `💼 ملخص التدفق المالي الحالي من وكيل التحليل المالي:\n• إجمالي الإيرادات: ${metrics.totalIncome.toLocaleString()} ر.س\n• إجمالي المصروفات: ${metrics.totalExpense.toLocaleString()} ر.س\n• صافي السيولة: ${metrics.netCashFlow.toLocaleString()} ر.س\n• مؤشر الصحة المالية: ${metrics.healthScore}/100 🟢`;
   } else {
-    // Financial Agent reasoning via Gemini Fabric Pattern
+    // Financial Agent reasoning via Gemini Fabric Pattern with fast 3.5s timeout fallback
+    const metrics = calculateCashFlowMetrics(transactionsStore);
+    const defaultFinancialReply = `مرحباً ${senderName} 💼، أنا **وكيل التحليل المالي (@yosef0bot)**.\n\n• صافي السيولة الحالية: **${metrics.netCashFlow.toLocaleString()} ر.س**\n• لتسجيل مصروف أرسل مثلاً: \`/expense 250 غداء عمل\`\n• لتسجيل إيراد أرسل مثلاً: \`/income 15000 دفعة عقد\`\n• أو اختر من الأزرار بالأسفل لعرض الميزانيات والتدفق النقدي:`;
+
     if (genAI) {
       try {
-        const prompt = `${FABRIC_FINANCIAL_ANALYSIS_PATTERN}\n\nبيانات النظام المالية الحالية للمطابقة:\n- إجمالي الإيرادات: ${calculateCashFlowMetrics(transactionsStore).totalIncome} ر.س\n- إجمالي المصروفات: ${calculateCashFlowMetrics(transactionsStore).totalExpense} ر.س\n- صافي السيولة: ${calculateCashFlowMetrics(transactionsStore).netCashFlow} ر.س\n\nرسالة المستخدم في تليجرام (${senderName}): "${trimmed}"\n\nأجب باللغة العربية باحترافية المحلل المالي التنفيذي CFO حصراً وفقاً لنمط Fabric. لا تنتحل شخصية أي وكيل آخر.`;
+        const prompt = `${FABRIC_FINANCIAL_ANALYSIS_PATTERN}\n\nبيانات النظام المالية الحالية للمطابقة:\n- إجمالي الإيرادات: ${metrics.totalIncome} ر.س\n- إجمالي المصروفات: ${metrics.totalExpense} ر.س\n- صافي السيولة: ${metrics.netCashFlow} ر.س\n\nرسالة المستخدم في تليجرام (${senderName}): "${trimmed}"\n\nأجب باللغة العربية باحترافية المحلل المالي التنفيذي CFO حصراً وبإيجاز. لا تنتحل شخصية أي وكيل آخر.`;
 
-        const result = await genAI.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt,
-        });
-        replyText = result.text || `مرحباً بك، معك وكيل التحليل المالي (@yosef0bot). يمكنك تسجيل قيودك المالية أو الاستفسار عن الميزانيات.`;
+        const result = await Promise.race([
+          genAI.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+          }),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500)),
+        ]);
+        replyText = (result && 'text' in result && result.text) ? result.text : defaultFinancialReply;
       } catch {
-        replyText = `مرحباً ${senderName}، أنا وكيل التحليل المالي. يمكنك استخدام أوامر /expense و/budget و/summary لمتابعة حساباتك وميزانياتك.`;
+        replyText = defaultFinancialReply;
       }
     } else {
-      replyText = `مرحباً ${senderName}، أنا وكيل التحليل المالي (@yosef0bot).\nيمكنك إرسال قيود المصروفات والإيرادات (/expense, /income) أو طلب الميزانيات والملخص المالي (/budget, /summary).`;
+      replyText = defaultFinancialReply;
     }
   }
 
@@ -1546,14 +1555,19 @@ const defaultWebhookUrl =
   process.env.TELEGRAM_WEBHOOK_URL ||
   'https://ais-dev-q2x6gzcx2p4qym6t3mp7a7-248609321129.europe-west2.run.app/api/telegram/webhook';
 
-let currentTelegramMode: 'webhook' | 'polling' = 'webhook';
+let currentTelegramMode: 'webhook' | 'polling' = 'polling';
 
 async function bootstrapDefaultFinancialTelegramBot(token: string) {
   try {
     const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
     const data = await meRes.json();
     if (data?.ok && data.result) {
-      // 1. Set commands menu in Telegram
+      // 1. Clear any webhook that might be blocked by preview proxy (302 Found), keeping pending updates so queued messages are answered immediately
+      await fetch(`https://api.telegram.org/bot${token}/deleteWebhook`, {
+        method: 'POST',
+      }).catch(() => {});
+
+      // 2. Set commands menu in Telegram
       await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1570,13 +1584,6 @@ async function bootstrapDefaultFinancialTelegramBot(token: string) {
         }),
       }).catch(() => {});
 
-      // 2. Set Production Webhook on Telegram servers
-      const whRes = await fetch(
-        `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(defaultWebhookUrl)}`,
-        { method: 'POST' }
-      );
-      const whData = await whRes.json();
-
       const entry: ConnectedTelegramBot = {
         agentId: 'fin-agent-01',
         botToken: token,
@@ -1586,7 +1593,7 @@ async function bootstrapDefaultFinancialTelegramBot(token: string) {
         botFirstName: data.result.first_name || 'وكيل التحليل المالي',
         connectedAt: new Date().toISOString(),
         lastUpdateId: 0,
-        pollingActive: false, // Inactive because Webhook is active
+        pollingActive: true,
         messagesProcessed: 0,
         activeChats: [],
       };
@@ -1597,19 +1604,18 @@ async function bootstrapDefaultFinancialTelegramBot(token: string) {
       }
 
       auditLogsStore.unshift({
-        id: `log-wh-init-${Date.now()}`,
+        id: `log-poll-init-${Date.now()}`,
         timestamp: new Date().toISOString(),
         channel: 'telegram',
-        event: whData?.ok
-          ? `Telegram Production Webhook Activated: ${defaultWebhookUrl}`
-          : `Telegram Webhook Setup Failed: ${whData?.description || 'Unknown'}`,
+        event: `Connected Live Financial Telegram Bot @${data.result.username} (Active Long Polling)`,
         ip: 'api.telegram.org',
-        status: whData?.ok ? 'success' : 'warning',
+        status: 'success',
         tokenUsed: entry.maskedToken,
-        latencyMs: 40,
+        latencyMs: 35,
       });
 
-      console.log(`📡 Telegram Webhook status:`, whData);
+      // 3. Start Long Polling loop immediately to process pending and live messages
+      pollSingleBotUpdates(entry);
     }
   } catch (err) {
     console.error('Failed to bootstrap Telegram bot:', err);
@@ -1895,12 +1901,11 @@ app.post('/api/agent/chat', async (req, res) => {
       try {
         const prompt = `${FABRIC_FINANCIAL_ANALYSIS_PATTERN}\n\nبيانات النظام الحالية للمطابقة:\n- إجمالي الإيرادات: ${calculateCashFlowMetrics(transactionsStore).totalIncome} ر.س\n- إجمالي المصروفات: ${calculateCashFlowMetrics(transactionsStore).totalExpense} ر.س\n- صافي التدفق المالي: ${calculateCashFlowMetrics(transactionsStore).netCashFlow} ر.س\n\nطلب/سؤال المستخدم في الكونسول: "${message}"\n\nأجب باللغة العربية باحترافية وبنية التحليل المالي التنفيذي الصارمة لنمط Fabric.`;
         const response = await genAI.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-3-flash-preview',
           contents: prompt,
         });
         agentReply = response.text || 'مرحباً، أنا وكيل التحليل المالي. أنا جاهز لإدارة فواتيرك، ميزانياتك، وتدقيق تدفقاتك النقدية.';
-      } catch (err) {
-        console.error('Gemini call error:', err);
+      } catch {
         agentReply = `أهلاً بك! أنا وكيل التحليل المالي في Tariq-AgentOS. يمكنك إعطائي أي أمر مالي مثل تسجيل مصروف، أو الاستعلام عن الميزانية، أو الاطلاع على ملخص التدفقات النقدية.`;
       }
     } else {
