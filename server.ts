@@ -4,7 +4,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import {
   parseFinancialInput,
   calculateBudgetStatus,
@@ -41,7 +41,14 @@ app.use(express.json());
 // Initialize Gemini Client if key exists
 let genAI: GoogleGenAI | null = null;
 if (process.env.GEMINI_API_KEY) {
-  genAI = new GoogleGenAI();
+  genAI = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
 }
 
 // -------------------------------------------------------------
@@ -755,21 +762,8 @@ async function handleChannelWebhook(req: express.Request, res: express.Response,
     const metrics = calculateCashFlowMetrics(transactionsStore);
     replyText = `💼 ملخص التدفق النقدي لهذا الشهر من بوت FinOS:\n• إجمالي الإيرادات: ${metrics.totalIncome.toLocaleString()} ر.س\n• إجمالي المصروفات: ${metrics.totalExpense.toLocaleString()} ر.س\n• صافي التدفق: ${metrics.netCashFlow.toLocaleString()} ر.س\n• مؤشر الصحة المالية: ${metrics.healthScore}/100 🟢\n• عدد المعاملات المسجلة: ${transactionsStore.length}`;
   } else {
-    // General or financial advice via Gemini or agent reasoning
-    if (genAI) {
-      try {
-        const prompt = `أنت الوكيل المالي الذكي (FinOS Agent @TariqFin_Bot) داخل نظام تشغيل الوكلاء Tariq-AgentOS. وصلتك هذه الرسالة عبر تليجرام من مستخدم مصرح: "${text}". أجب باللغة العربية باختصار ومهنية كخبير مالي متصل بأنظمة المحاسبة، واقترح أوامر تليجرام السريعة مثل /budget أو /expense أو /summary.`;
-        const result = await genAI.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt,
-        });
-        replyText = result.text || 'مرحباً، أنا وكيل المالية الذكي (FinOS Bot). يمكنك إرسال أوامرك مثل /expense أو /budget أو /summary مباشرة هنا.';
-      } catch {
-        replyText = `مرحباً ${senderName}، أنا وكيل المالية في FinOS Bot. تلقيت رسالتك: "${text}". يمكنك كتابة أمر مثل /expense 150 غداء عمل أو /budget للاطلاع على ميزانياتك.`;
-      }
-    } else {
-      replyText = `مرحباً ${senderName}، أنا بوت المالية FinOS. يمكنك استخدام أوامر تليجرام المباشرة: /expense لتسجيل المصروفات، أو /budget لعرض الميزانيات، أو /summary للملخص الشهري.`;
-    }
+    // Conversational response via Gemini
+    replyText = await generateConversationalFinancialReply(text, senderName, `sim-${chatId}`);
   }
 
   const latency = Date.now() - startTime;
@@ -919,6 +913,91 @@ async function createAgentTopicsInTelegramGroup(botEntry: ConnectedTelegramBot, 
   return createdTopics;
 }
 
+// Multi-turn conversation memory per chat so the Financial Agent naturally converses back and forth
+const telegramConversationMemory = new Map<
+  string,
+  Array<{ role: 'user' | 'model'; text: string }>
+>();
+
+async function generateConversationalFinancialReply(
+  userMessage: string,
+  senderName: string,
+  chatKey: string | number,
+  actionExecutedSummary?: string
+): Promise<string> {
+  const key = String(chatKey);
+  const history = telegramConversationMemory.get(key) || [];
+  const metrics = calculateCashFlowMetrics(transactionsStore);
+
+  const budgetsSnapshot = budgetsStore
+    .map((b) => {
+      const label = CATEGORY_LABELS_AR[b.category] || b.category;
+      const left = Math.max(0, b.allocated - b.spent);
+      return `${label}: مصروف ${b.spent.toLocaleString()} من ${b.allocated.toLocaleString()} ر.س (متبقي ${left.toLocaleString()} ر.س)`;
+    })
+    .join(' | ');
+
+  const recentTxSnapshot = transactionsStore
+    .slice(0, 4)
+    .map((t) => `${t.type === 'income' ? 'إيراد' : 'مصروف'} ${t.amount} ر.س (${t.description})`)
+    .join(' ، ');
+
+  const conversationTranscript = history
+    .slice(-10)
+    .map((turn) => `${turn.role === 'user' ? `المستخدم (${senderName})` : 'أنت (الوكيل المالي)'}: ${turn.text}`)
+    .join('\n');
+
+  const systemInstruction = `أنت "وكيل التحليل المالي" (@yosef0bot)، مستشار ومحاور مالي ذكي وطبيعي جداً تتحدث مع "${senderName}" عبر تليجرام.
+أهم قواعد أسلوبك:
+1. تحدث بأسلوب بشري طبيعي، ودود، ذكي، وتفاعلي (خذ وأعطِ في الكلام كأنك مستشار مالي وصديق خبير يجلس معه).
+2. ممنوع تماماً إرسال قوالب آلية جاهزة أو قوائم أوامر متكررة مثل (/budget, /expense, /summary) إلا إذا طلب المستخدم صراحةً معرفة الأوامر.
+3. لست محصوراً أبداً في أوامر جامدة! يمكنك مناقشة أي فكرة، خطة مالية، تسعير، استثمار، توفير، دراسة جدوى، تحليل مصاريف، أو حتى الدردشة العامة والرد على أسئلته بمرونة وذكاء.
+4. لديك وصول مباشر وحقيقي لأرقام النظام الحالية عند الحاجة إليها:
+   - إجمالي الإيرادات: ${metrics.totalIncome.toLocaleString()} ر.س
+   - إجمالي المصروفات: ${metrics.totalExpense.toLocaleString()} ر.س
+   - صافي السيولة الحالية: ${metrics.netCashFlow.toLocaleString()} ر.س
+   - تفاصيل الميزانيات: ${budgetsSnapshot}
+   - آخر المعاملات: ${recentTxSnapshot}
+${actionExecutedSummary ? `5. ملاحظة هامة جداً: قمتَ للتو بتنفيذ العملية التالية في الدفاتر بناءً على رسالته: (${actionExecutedSummary}) — أكّد له ذلك بأسلوب طبيعي وحديث ودي دون قوالب رسمية جامدة.` : ''}
+اجعل ردك طبيعياً، مباشراً، ومترابطاً مع سياق الحديث السابق.`;
+
+  const fullPrompt = conversationTranscript
+    ? `سياق المحادثة السابقة:\n${conversationTranscript}\n\nرسالة المستخدم الجديدة (${senderName}): ${userMessage}`
+    : `رسالة المستخدم (${senderName}): ${userMessage}`;
+
+  let replyText = '';
+  if (genAI) {
+    try {
+      const response = await genAI.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: fullPrompt,
+        config: {
+          systemInstruction,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+        },
+      });
+      replyText = (response.text || '').trim();
+    } catch (err) {
+      console.error('Gemini conversational error:', err);
+    }
+  }
+
+  if (!replyText) {
+    replyText = actionExecutedSummary
+      ? `تم طال عمرك! ${actionExecutedSummary}. قول لي، في بالك شيء ثاني نراجعه أو نحسبه سوا؟`
+      : `أبداً ماني محصور في أوامر محددة! أقدر آخذ وأعطي معك في أي موضوع مالي، نحسب جدوى أي فكرة في بالك، نرتب الميزانيات والسيولة، أو نسولف في أي استفسار عندك. وش اللي في خاطرك اليوم؟`;
+  }
+
+  history.push({ role: 'user', text: userMessage });
+  history.push({ role: 'model', text: replyText });
+  if (history.length > 24) {
+    history.splice(0, history.length - 24);
+  }
+  telegramConversationMemory.set(key, history);
+
+  return replyText;
+}
+
 async function generateTelegramAgentReply(
   text: string,
   senderName: string,
@@ -929,55 +1008,13 @@ async function generateTelegramAgentReply(
 ): Promise<{ replyText: string; createdTx: FinancialTransaction | null; targetAgentName: string; activeAgentId: string }> {
   const trimmed = text.trim();
 
-  // 1. Handle /start command - Welcomes directly into the Financial Agent chat only
-  if (trimmed === '/start' || trimmed.startsWith('/start')) {
-    const metrics = calculateCashFlowMetrics(transactionsStore);
-    return {
-      replyText: `💼 أهلاً بك ${senderName} في محادثة **وكيل التحليل المالي (FinOS Bot)**!\n\nأنا وكيلك المالي المستقل، ومهمتي محصورة في إدارة العمليات المالية والتدفقات النقدية ومتابعة الميزانيات وإعداد التقارير المحاسبية.\n\n📌 الأوامر المالية المتاحة:\n• /budget — تقرير الميزانيات التشغيلية والمتبقي\n• /summary — ملخص التدفق النقدي وصافي السيولة (${metrics.netCashFlow.toLocaleString()} ر.س)\n• /expense 250 غداء عمل — تسجيل مصروف فوري\n• /income 15000 دفعة عقد — تسجيل إيراد جديد\n• /vat — فحص ضريبة القيمة المضافة (15%)\n• /fabric — تحليل استراتيجي بنمط Fabric المالي\n\nأرسل أي استفسار أو قيد مالي مباشرة وسأجيبك فوراً!`,
-      createdTx: null,
-      targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
-      activeAgentId: 'fin-agent-01',
-    };
-  }
-
-  // 2. Reject agent switching - This bot is strictly for the Financial Agent
+  // Reject switching to other agents if someone clicks an old button
   if (trimmed.startsWith('/switch_')) {
-    return {
-      replyText: `💼 هذه المحادثة مخصصة حصرياً لـ **وكيل التحليل المالي** (@yosef0bot).\nوكلاء المنظومة الآخرين (التسويق والمبيعات) ستكون لهم بوتاتهم ومحادثاتهم المستقلة لاحقاً في المرحلة القادمة ولا يشتركون في هذا البوت.`,
-      createdTx: null,
-      targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
-      activeAgentId: 'fin-agent-01',
-    };
-  }
-
-  // 3. Marketing queries directed to Financial Agent - Answer from Financial perspective only
-  if (trimmed === '/campaigns' || trimmed === '/roas') {
-    const mktBudget = budgetsStore.find((b) => b.category === 'marketing');
-    const spent = mktBudget ? mktBudget.spent : 8500;
-    const allocated = mktBudget ? mktBudget.allocated : 15000;
-    const left = Math.max(0, allocated - spent);
-    return {
-      replyText: `💼 بصفتي **وكيل التحليل المالي**:\n• الميزانية المرصودة للتسويق: ${allocated.toLocaleString()} ر.س\n• المنصرف الفعلي: ${spent.toLocaleString()} ر.س\n• الرصيد المتبقي المعتمد: ${left.toLocaleString()} ر.س\n• لتسجيل أي مصروف إعلاني في الدفاتر المالية أرسل: /expense 1500 إعلانات سناب`,
-      createdTx: null,
-      targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
-      activeAgentId: 'fin-agent-01',
-    };
-  }
-
-  // 4. Sales/Deals queries directed to Financial Agent - Answer from Revenue perspective only
-  if (trimmed === '/pipeline' || trimmed === '/deals' || trimmed.startsWith('/quote')) {
-    return {
-      replyText: `💼 بصفتي **وكيل التحليل المالي**:\n• لتسجيل أي إيراد محصل من الصفقات أرسل: /income 25000 دفعة عميل\n• لعرض إجمالي السيولة والتحصيلات الحالية أرسل: /summary`,
-      createdTx: null,
-      targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
-      activeAgentId: 'fin-agent-01',
-    };
-  }
-
-  // 5. Fabric Financial Pattern command
-  if (trimmed === '/fabric') {
-    const metrics = calculateCashFlowMetrics(transactionsStore);
-    const replyText = `📊 **تقرير Fabric التنفيذي للتحليل المالي (CFO Brief)**:\n\n• **إجمالي الإيرادات المحصلة**: ${metrics.totalIncome.toLocaleString()} ر.س\n• **إجمالي المصروفات التشغيلية**: ${metrics.totalExpense.toLocaleString()} ر.س\n• **صافي السيولة النقدية**: ${metrics.netCashFlow.toLocaleString()} ر.س\n• **معدل الادخار التشغيلي**: ${metrics.savingsRate}%\n• **مؤشر الاستقرار المالي**: ${metrics.healthScore}/100 🟢\n\n💡 **التوصية المالية**: التدفقات النقدية في وضع صحي وآمن، مع ضرورة مراقبة بند الرواتب والعقود لبلوغه الحد المرصود.`;
+    const replyText = await generateConversationalFinancialReply(
+      'هل يمكنك التحدث كوكيل تسويق أو مبيعات؟ (ملاحظة: وضح للمستخدم بود أنك متخصص ومكرس هنا كوكيل ومستشار مالي له، وأن وكلاء التسويق والمبيعات مستقلون)',
+      senderName,
+      chatId
+    );
     return {
       replyText,
       createdTx: null,
@@ -986,34 +1023,12 @@ async function generateTelegramAgentReply(
     };
   }
 
-  // 6. Instant response for greetings and short conversational pings (e.g. مرحبا, هلا, السلام عليكم, ا, أ)
-  const normalizedGreeting = trimmed.replace(/[ًٌٍَُِّْ!؟?.,]/g, '').trim().toLowerCase();
-  if (
-    normalizedGreeting.length <= 3 ||
-    /^(مرحبا|اهلا|أهلا|هلا|السلام عليكم|سلام|صباح الخير|مساء الخير|حي الله|يا هلا|كيف الحال|شلونك|اخبارك|hi|hello|hey|start)$/.test(
-      normalizedGreeting
-    )
-  ) {
-    const metrics = calculateCashFlowMetrics(transactionsStore);
-    return {
-      replyText: `أهلاً ومرحباً بك ${senderName}! 💼\nمعك **وكيل التحليل المالي (@yosef0bot)** في خدمتك.\n\n📊 **الموقف المالي اللحظي**:\n• صافي السيولة: **${metrics.netCashFlow.toLocaleString()} ر.س**\n• إجمالي الإيرادات: **+${metrics.totalIncome.toLocaleString()} ر.س**\n• إجمالي المصروفات: **-${metrics.totalExpense.toLocaleString()} ر.س**\n\n📌 يمكنك إرسال أمر مباشر أو الكتابة بطبيعية مثل:\n• *"صرفت 350 ريال فاتورة إنترنت"*\n• *"استلمت 12000 ريال دفعة عميل"*\n• أو الضغط على أحد الأزرار بالأسفل 👇`,
-      createdTx: null,
-      targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
-      activeAgentId: 'fin-agent-01',
-    };
-  }
-
+  // Check if the message is recording an actual financial transaction (expense or income)
   const intent = parseFinancialInput(trimmed);
-  let replyText = '';
   let createdTx: FinancialTransaction | null = null;
+  let actionExecutedSummary: string | undefined;
 
-  if (trimmed === '/vat' || intent.action === 'audit_check') {
-    const totalExpenses = transactionsStore
-      .filter((t) => t.type === 'expense')
-      .reduce((acc, t) => acc + t.amount, 0);
-    const estimatedVat = Math.round(totalExpenses * 0.15);
-    replyText = `🧾 تقرير ضريبة القيمة المضافة (VAT 15%):\n• إجمالي المصروفات الخاضعة: ${totalExpenses.toLocaleString()} ر.س\n• الضريبة التقديرية (15%): ${estimatedVat.toLocaleString()} ر.س\n• حالة الدفاتر: مطابقة ومستعدة للإقرار الضريبي.`;
-  } else if (intent.action === 'record_expense' && intent.amount) {
+  if (intent.action === 'record_expense' && intent.amount) {
     createdTx = {
       id: `tx-${Date.now().toString(36)}`,
       timestamp: new Date().toISOString(),
@@ -1027,7 +1042,7 @@ async function generateTelegramAgentReply(
       senderHandle: fromHandle,
       telegramChatId: chatId,
       status: 'cleared',
-      agentNotes: 'تم القيد مباشرة من بوت وكيل التحليل المالي الرسمي.',
+      agentNotes: 'تم القيد مباشرة من محادثة تليجرام.',
       synced: true,
     };
     transactionsStore.unshift(createdTx);
@@ -1035,11 +1050,10 @@ async function generateTelegramAgentReply(
 
     const catLabel = CATEGORY_LABELS_AR[createdTx.category] || createdTx.category;
     const catBudget = budgetsStore.find((b) => b.category === createdTx?.category);
-    const budgetInfo = catBudget
-      ? `\n• المتبقي في ميزانية ${catLabel}: ${(catBudget.allocated - catBudget.spent).toLocaleString()} ر.س (${Math.round((catBudget.spent / catBudget.allocated) * 100)}% مستهلك)`
+    const leftInfo = catBudget
+      ? ` والمتبقي في ميزانية ${catLabel} الآن هو ${(catBudget.allocated - catBudget.spent).toLocaleString()} ر.س`
       : '';
-
-    replyText = `✅ تم تسجيل المصروف بنجاح عبر وكيل التحليل المالي!\n• المبلغ: ${intent.amount.toLocaleString()} ${intent.currency}\n• التصنيف: ${catLabel}${budgetInfo}\n• رقم القيد: #${createdTx.id}`;
+    actionExecutedSummary = `تم تسجيل مصروف بمبلغ ${intent.amount.toLocaleString()} ${intent.currency} ضمن تصنيف "${catLabel}" برقم قيد #${createdTx.id}${leftInfo}`;
   } else if (intent.action === 'record_income' && intent.amount) {
     createdTx = {
       id: `tx-${Date.now().toString(36)}`,
@@ -1054,51 +1068,21 @@ async function generateTelegramAgentReply(
       senderHandle: fromHandle,
       telegramChatId: chatId,
       status: 'cleared',
-      agentNotes: 'تم قيد الإيراد مباشرة من محادثة وكيل التحليل المالي.',
+      agentNotes: 'تم قيد الإيراد مباشرة من محادثة تليجرام.',
       synced: true,
     };
     transactionsStore.unshift(createdTx);
-    replyText = `🎉 تم تسجيل الإيراد بنجاح عبر وكيل التحليل المالي!\n• المبلغ: +${intent.amount.toLocaleString()} ${intent.currency}\n• رقم القيد: #${createdTx.id}\n• تم تحديث التدفق النقدي في النظام.`;
-  } else if (intent.action === 'query_budget') {
-    const relevantBudgets = intent.category && intent.category !== 'all'
-      ? budgetsStore.filter((b) => b.category === intent.category)
-      : budgetsStore;
-
-    const summaryLines = relevantBudgets.map((b) => {
-      const label = CATEGORY_LABELS_AR[b.category] || b.category;
-      const left = Math.max(0, b.allocated - b.spent);
-      const pct = Math.round((b.spent / b.allocated) * 100);
-      return `• ${label}: متبقي ${left.toLocaleString()} ر.س من ${b.allocated.toLocaleString()} ر.س (${pct}%)`;
-    });
-
-    replyText = `📊 تقرير الميزانيات اللحظي من وكيل التحليل المالي:\n${summaryLines.join('\n')}`;
-  } else if (intent.action === 'query_summary') {
     const metrics = calculateCashFlowMetrics(transactionsStore);
-    replyText = `💼 ملخص التدفق المالي الحالي من وكيل التحليل المالي:\n• إجمالي الإيرادات: ${metrics.totalIncome.toLocaleString()} ر.س\n• إجمالي المصروفات: ${metrics.totalExpense.toLocaleString()} ر.س\n• صافي السيولة: ${metrics.netCashFlow.toLocaleString()} ر.س\n• مؤشر الصحة المالية: ${metrics.healthScore}/100 🟢`;
-  } else {
-    // Financial Agent reasoning via Gemini Fabric Pattern with fast 3.5s timeout fallback
-    const metrics = calculateCashFlowMetrics(transactionsStore);
-    const defaultFinancialReply = `مرحباً ${senderName} 💼، أنا **وكيل التحليل المالي (@yosef0bot)**.\n\n• صافي السيولة الحالية: **${metrics.netCashFlow.toLocaleString()} ر.س**\n• لتسجيل مصروف أرسل مثلاً: \`/expense 250 غداء عمل\`\n• لتسجيل إيراد أرسل مثلاً: \`/income 15000 دفعة عقد\`\n• أو اختر من الأزرار بالأسفل لعرض الميزانيات والتدفق النقدي:`;
-
-    if (genAI) {
-      try {
-        const prompt = `${FABRIC_FINANCIAL_ANALYSIS_PATTERN}\n\nبيانات النظام المالية الحالية للمطابقة:\n- إجمالي الإيرادات: ${metrics.totalIncome} ر.س\n- إجمالي المصروفات: ${metrics.totalExpense} ر.س\n- صافي السيولة: ${metrics.netCashFlow} ر.س\n\nرسالة المستخدم في تليجرام (${senderName}): "${trimmed}"\n\nأجب باللغة العربية باحترافية المحلل المالي التنفيذي CFO حصراً وبإيجاز. لا تنتحل شخصية أي وكيل آخر.`;
-
-        const result = await Promise.race([
-          genAI.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: prompt,
-          }),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3500)),
-        ]);
-        replyText = (result && 'text' in result && result.text) ? result.text : defaultFinancialReply;
-      } catch {
-        replyText = defaultFinancialReply;
-      }
-    } else {
-      replyText = defaultFinancialReply;
-    }
+    actionExecutedSummary = `تم تسجيل إيراد جديد بمبلغ +${intent.amount.toLocaleString()} ${intent.currency} برقم قيد #${createdTx.id} وأصبح صافي السيولة ${metrics.netCashFlow.toLocaleString()} ر.س`;
   }
+
+  // Generate a natural, human-like conversational response via Gemini
+  const replyText = await generateConversationalFinancialReply(
+    trimmed,
+    senderName,
+    chatId,
+    actionExecutedSummary
+  );
 
   return {
     replyText,
@@ -1151,7 +1135,13 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
             }).catch(() => {});
 
             if (chatId) {
-              const { replyText, activeAgentId } = await generateTelegramAgentReply(
+              await fetch(`https://api.telegram.org/bot${botEntry.botToken}/sendChatAction`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, action: 'typing' }),
+              }).catch(() => {});
+
+              const { replyText } = await generateTelegramAgentReply(
                 cmdData,
                 senderName,
                 fromHandle,
@@ -1167,7 +1157,6 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
                   chat_id: chatId,
                   ...(threadId ? { message_thread_id: threadId } : {}),
                   text: replyText,
-                  reply_markup: buildTelegramInlineKeyboard(activeAgentId),
                 }),
               }).catch(() => {});
             }
@@ -1198,7 +1187,18 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
             });
           }
 
-          // Special command /setup_topics inside a Telegram Forum Group to auto-create 3 agent topics!
+          // Show real-time "typing..." indicator in Telegram while generating response
+          await fetch(`https://api.telegram.org/bot${botEntry.botToken}/sendChatAction`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              ...(threadId ? { message_thread_id: threadId } : {}),
+              action: 'typing',
+            }),
+          }).catch(() => {});
+
+          // Special command /setup_topics inside a Telegram Forum Group
           if (text.trim().startsWith('/setup_topics')) {
             try {
               const created = await createAgentTopicsInTelegramGroup(botEntry, chatId);
@@ -1223,7 +1223,7 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
             continue;
           }
 
-          const { replyText, createdTx, targetAgentName, activeAgentId } = await generateTelegramAgentReply(
+          const { replyText, createdTx, targetAgentName } = await generateTelegramAgentReply(
             text,
             senderName,
             fromHandle,
@@ -1276,6 +1276,8 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
             latencyMs: 21,
           });
 
+          const showInlineMenu = text.trim() === '/menu' || text.trim() === '/commands';
+
           await fetch(`https://api.telegram.org/bot${botEntry.botToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1283,7 +1285,7 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
               chat_id: chatId,
               ...(threadId ? { message_thread_id: threadId } : {}),
               text: replyText,
-              reply_markup: buildTelegramInlineKeyboard(activeAgentId),
+              ...(showInlineMenu ? { reply_markup: buildTelegramInlineKeyboard() } : {}),
             }),
           });
         }
@@ -1293,7 +1295,7 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
     // Transient network error, continue polling on next tick
   } finally {
     if (botEntry.pollingActive) {
-      const t = setTimeout(() => pollSingleBotUpdates(botEntry), 1500);
+      const t = setTimeout(() => pollSingleBotUpdates(botEntry), 1200);
       pollingTimers.set(botEntry.agentId, t);
     }
   }
@@ -1670,7 +1672,6 @@ app.post('/api/telegram/webhook', async (req, res) => {
           chat_id: chatId,
           ...(threadId ? { message_thread_id: threadId } : {}),
           text: replyText,
-          reply_markup: buildTelegramInlineKeyboard(),
         }),
       }).catch(() => {});
     }
@@ -1766,6 +1767,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
   });
 
   // Reply back to user via Telegram Bot API
+  const showInlineMenu = text.trim() === '/menu' || text.trim() === '/commands';
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1773,7 +1775,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
       chat_id: chatId,
       ...(threadId ? { message_thread_id: threadId } : {}),
       text: replyText,
-      reply_markup: buildTelegramInlineKeyboard(),
+      ...(showInlineMenu ? { reply_markup: buildTelegramInlineKeyboard() } : {}),
     }),
   }).catch(() => {});
 
@@ -1821,13 +1823,9 @@ app.post('/api/agent/chat', async (req, res) => {
   let agentReply = '';
   let createdTx: FinancialTransaction | null = null;
 
-  if (agentRouting.specialty === 'marketing' && !agentRouting.isTargetActive && intent.action === 'general_query') {
-    const mktBudget = budgetsStore.find((b) => b.category === 'marketing');
-    const mktLeft = mktBudget ? (mktBudget.allocated - mktBudget.spent).toLocaleString() : '6,500';
-    agentReply = `📢 **[راوتر نظام تشغيل الوكلاء Tariq-AgentOS]**:\n• **الوكيل المستهدف**: وكيل التسويق الرقمي (MarketOS)\n• **حالة الوكيل**: مجدول ومخطط للإضافة والتفعيل في **المرحلة 2** (المنظومة مصممة لتضم وكيل تسويق ووكيل مبيعات لاحقاً).\n• **الدور الحالي للوكيل المالي (FinOS)**: يتولى حالياً إدارة مخصصات ميزانية التسويق والإعلانات (المتبقي في ميزانية التسويق: **${mktLeft} ر.س**).\n• يمكنك توجيه أمر مالي مثل: *"سجلت 2500 ريال إعلانات تيك توك"* وسيتم قيدها واعتمادها فوراً.`;
-  } else if (agentRouting.specialty === 'sales' && !agentRouting.isTargetActive && intent.action === 'general_query') {
-    agentReply = `🎯 **[راوتر نظام تشغيل الوكلاء Tariq-AgentOS]**:\n• **الوكيل المستهدف**: وكيل المبيعات والصفقات (SalesOS)\n• **حالة الوكيل**: مجدول ومخطط للإضافة والتفعيل في **المرحلة 2**.\n• **الدور الحالي للوكيل المالي (FinOS)**: يتولى توثيق تحصيلات العقود وإيرادات الصفقات وإصدار القيود النقدية.\n• يمكنك كتابة أمر مثل: *"استلمت دفعة مبيعات بقيمة 15,000 ريال"* وسيقوم الوكيل المالي بتحديث الدفاتر فوراً.`;
-  } else if (intent.action === 'record_expense' && intent.amount) {
+  // Generate conversational response via Gemini (while still executing any recorded expense/income)
+  let actionSummary: string | undefined;
+  if (intent.action === 'record_expense' && intent.amount) {
     createdTx = {
       id: `tx-${Date.now().toString(36)}`,
       timestamp: new Date().toISOString(),
@@ -1839,19 +1837,13 @@ app.post('/api/agent/chat', async (req, res) => {
       description: message,
       source: 'web_frontend',
       status: 'cleared',
-      agentNotes: 'تم تسجيل المعاملة مباشرة من خلال شات واجهة الويب الخاصة بنظام التشغيل.',
+      agentNotes: 'تم تسجيل المعاملة مباشرة من خلال شات واجهة الويب.',
       synced: true,
     };
     transactionsStore.unshift(createdTx);
     adjustBudget(createdTx.category, createdTx.amount, true);
-
     const catLabel = CATEGORY_LABELS_AR[createdTx.category] || createdTx.category;
-    const catBudget = budgetsStore.find((b) => b.category === createdTx?.category);
-    const budgetInfo = catBudget
-      ? ` • استهلاك ميزانية ${catLabel}: ${Math.round((catBudget.spent / catBudget.allocated) * 100)}%`
-      : '';
-
-    agentReply = `✅ تم تقييد المصروف بنجاح في النظام:\n• المبلغ: ${intent.amount.toLocaleString()} ${intent.currency}\n• التصنيف: ${catLabel}${budgetInfo}\n• تم مزامنة القيد وسيكون مرئياً في سجل تليجرام والتقارير.`;
+    actionSummary = `تم تسجيل مصروف ${intent.amount.toLocaleString()} ${intent.currency} في تصنيف ${catLabel}`;
   } else if (intent.action === 'record_income' && intent.amount) {
     createdTx = {
       id: `tx-${Date.now().toString(36)}`,
@@ -1868,50 +1860,15 @@ app.post('/api/agent/chat', async (req, res) => {
       synced: true,
     };
     transactionsStore.unshift(createdTx);
-    agentReply = `🎉 تم توثيق الإيراد في الدفاتر:\n• المبلغ: +${intent.amount.toLocaleString()} ${intent.currency}\n• التصنيف: إيرادات ومبيعات\n• تم تحديث الأرقام والتدفقات النقدية فوراً.`;
-  } else if (intent.action === 'query_budget') {
-    const relevantBudgets = intent.category && intent.category !== 'all'
-      ? budgetsStore.filter((b) => b.category === intent.category)
-      : budgetsStore;
-
-    const list = relevantBudgets.map((b) => {
-      const label = CATEGORY_LABELS_AR[b.category] || b.category;
-      const left = Math.max(0, b.allocated - b.spent);
-      const pct = Math.round((b.spent / b.allocated) * 100);
-      return `• **${label}**: المتبقي ${left.toLocaleString()} ر.س من ${b.allocated.toLocaleString()} ر.س (${pct}% مستهلك)`;
-    });
-
-    agentReply = `📊 **حالة الميزانيات التشغيلية الحالية**:\n${list.join('\n')}\n\n*البيانات متزامنة آنياً مع جميع مصادر الدخل والمصروفات.*`;
-  } else if (intent.action === 'query_summary') {
-    const metrics = calculateCashFlowMetrics(transactionsStore);
-    agentReply = `💼 **تقرير الموقف المالي الشامل**:\n• إجمالي الإيرادات: **${metrics.totalIncome.toLocaleString()} ر.س**\n• إجمالي المصروفات: **${metrics.totalExpense.toLocaleString()} ر.س**\n• صافي التدفق المالي: **${metrics.netCashFlow.toLocaleString()} ر.س**\n• مؤشر الصحة المالية: **${metrics.healthScore}/100** 🟢\n• إجمالي القيود المالية: **${transactionsStore.length} معاملة**\n• حالة الربط مع تليجرام: **متصل ومفعل (Active Sync)**`;
-  } else if (intent.action === 'audit_check') {
-    const nearLimitBudgets = budgetsStore.filter((b) => (b.spent / b.allocated) >= 0.8);
-    const warnings = nearLimitBudgets.map((b) => {
-      const label = CATEGORY_LABELS_AR[b.category] || b.category;
-      return `⚠️ تحذير: بند "${label}" اقترب من الحد الأقصى (${Math.round((b.spent / b.allocated) * 100)}%).`;
-    });
-
-    agentReply = warnings.length > 0
-      ? `🔍 **نتائج التدقيق المالي الآلي**:\n${warnings.join('\n')}\n\n• تم التحقق من ضريبة القيمة المضافة 15% لجميع الفواتير المسجلة.\n• لم يتم رصد أي محاولات اختراق أو معاملات مجهولة المصدر.`
-      : `🔍 **نتائج التدقيق المالي الآلي**:\n✅ جميع بنود الميزانية ضمن الحدود الآمنة والمستهدفة.\n• تم فحص ${transactionsStore.length} حركة مالية ولا توجد انحرافات غير مصرح بها.`;
-  } else {
-    // General chat using Gemini if available with Fabric Pattern
-    if (genAI) {
-      try {
-        const prompt = `${FABRIC_FINANCIAL_ANALYSIS_PATTERN}\n\nبيانات النظام الحالية للمطابقة:\n- إجمالي الإيرادات: ${calculateCashFlowMetrics(transactionsStore).totalIncome} ر.س\n- إجمالي المصروفات: ${calculateCashFlowMetrics(transactionsStore).totalExpense} ر.س\n- صافي التدفق المالي: ${calculateCashFlowMetrics(transactionsStore).netCashFlow} ر.س\n\nطلب/سؤال المستخدم في الكونسول: "${message}"\n\nأجب باللغة العربية باحترافية وبنية التحليل المالي التنفيذي الصارمة لنمط Fabric.`;
-        const response = await genAI.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: prompt,
-        });
-        agentReply = response.text || 'مرحباً، أنا وكيل التحليل المالي. أنا جاهز لإدارة فواتيرك، ميزانياتك، وتدقيق تدفقاتك النقدية.';
-      } catch {
-        agentReply = `أهلاً بك! أنا وكيل التحليل المالي في Tariq-AgentOS. يمكنك إعطائي أي أمر مالي مثل تسجيل مصروف، أو الاستعلام عن الميزانية، أو الاطلاع على ملخص التدفقات النقدية.`;
-      }
-    } else {
-      agentReply = `أهلاً بك! أنا وكيل التحليل المالي في Tariq-AgentOS. يمكنك إعطائي أوامر مثل "سجلت مصروف 200 ريال ضيافة"، أو "كم متبقي في ميزانية التسويق"، وستتم معالجتها وتحديث الدفاتر فوراً.`;
-    }
+    actionSummary = `تم تسجيل إيراد +${intent.amount.toLocaleString()} ${intent.currency}`;
   }
+
+  agentReply = await generateConversationalFinancialReply(
+    message,
+    'المستخدم',
+    'web-console',
+    actionSummary
+  );
 
   const latency = Date.now() - startTime;
 
