@@ -69,10 +69,10 @@ export default function App() {
     },
   ]);
   const [metrics, setMetrics] = useState({
-    totalIncome: 52000,
-    totalExpense: 9650,
-    netCashFlow: 42350,
-    savingsRate: 81.4,
+    totalIncome: 0,
+    totalExpense: 0,
+    netCashFlow: 0,
+    savingsRate: 0,
     healthScore: 100,
   });
   const [budgets, setBudgets] = useState<BudgetCategory[]>([]);

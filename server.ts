@@ -229,193 +229,11 @@ const agentsStore: AgentProfile[] = [
   },
 ];
 
-const budgetsStore: BudgetCategory[] = [
-  {
-    id: 'b-1',
-    category: 'marketing',
-    allocated: 15000,
-    spent: 8500,
-    period: 'شهري (أكتوبر 2026)',
-    threshold: 85,
-    color: '#8b5cf6',
-  },
-  {
-    id: 'b-2',
-    category: 'software',
-    allocated: 6000,
-    spent: 4200,
-    period: 'شهري (أكتوبر 2026)',
-    threshold: 80,
-    color: '#06b6d4',
-  },
-  {
-    id: 'b-3',
-    category: 'food_dining',
-    allocated: 3500,
-    spent: 1950,
-    period: 'شهري (أكتوبر 2026)',
-    threshold: 75,
-    color: '#f59e0b',
-  },
-  {
-    id: 'b-4',
-    category: 'supplies',
-    allocated: 4000,
-    spent: 1400,
-    period: 'شهري (أكتوبر 2026)',
-    threshold: 85,
-    color: '#10b981',
-  },
-  {
-    id: 'b-5',
-    category: 'salaries',
-    allocated: 45000,
-    spent: 45000,
-    period: 'شهري (أكتوبر 2026)',
-    threshold: 95,
-    color: '#3b82f6',
-  },
-];
+const budgetsStore: BudgetCategory[] = [];
 
-const transactionsStore: FinancialTransaction[] = [
-  {
-    id: 'tx-101',
-    timestamp: new Date(Date.now() - 3600000 * 26).toISOString(),
-    type: 'income',
-    amount: 52000,
-    currency: 'SAR',
-    category: 'sales',
-    merchantOrParty: 'شركة الأفق الرقمي للتجارة',
-    description: 'تحصيل دفعة عقد تطوير برمجيات الربع الرابع',
-    source: 'web_frontend',
-    status: 'cleared',
-    agentNotes: 'تمت مطابقة الفاتورة مع العقد الرئيسي بنجاح.',
-    synced: true,
-  },
-  {
-    id: 'tx-102',
-    timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
-    type: 'expense',
-    amount: 4200,
-    currency: 'SAR',
-    category: 'software',
-    merchantOrParty: 'Google Cloud Platform & AI Studio',
-    description: 'تجديد خدمات السحابة ونماذج الذكاء الاصطناعي',
-    source: 'telegram',
-    senderHandle: '@tariq_admin',
-    telegramChatId: -100987654321,
-    status: 'cleared',
-    agentNotes: 'تم الاستلام عبر بوت تليجرام (@TariqFin_Bot) والتحقق من الرمز المحاسبي السحابي.',
-    synced: true,
-  },
-  {
-    id: 'tx-103',
-    timestamp: new Date(Date.now() - 3600000 * 8).toISOString(),
-    type: 'expense',
-    amount: 1950,
-    currency: 'SAR',
-    category: 'food_dining',
-    merchantOrParty: 'مطعم السرايا للضيافة',
-    description: 'عشاء عمل مع وفد المستثمرين',
-    source: 'telegram',
-    senderHandle: '@tariq_admin',
-    telegramChatId: -100987654321,
-    status: 'cleared',
-    agentNotes: 'تم قيد المصروف في حساب العلاقات العامة والضيافة عبر تليجرام.',
-    synced: true,
-  },
-  {
-    id: 'tx-104',
-    timestamp: new Date(Date.now() - 3600000 * 3).toISOString(),
-    type: 'expense',
-    amount: 3500,
-    currency: 'SAR',
-    category: 'marketing',
-    merchantOrParty: 'حملة تيك توك وسناب شات',
-    description: 'إطلاق إعلانات موسم الخريف',
-    source: 'web_frontend',
-    status: 'cleared',
-    agentNotes: 'تم رصد 56.6% من ميزانية التسويق الإجمالية.',
-    synced: true,
-  },
-];
+const transactionsStore: FinancialTransaction[] = [];
 
-const messagesStore: SyncedMessage[] = [
-  {
-    id: 'msg-01',
-    timestamp: new Date(Date.now() - 3600000 * 18 - 60000).toISOString(),
-    channel: 'telegram',
-    sender: {
-      name: 'طارق المدير المالي',
-      handle: '@tariq_admin',
-      isAgent: false,
-    },
-    telegramThreadId: 101,
-    telegramTopicName: 'المالية والمصروفات',
-    content: '/expense 4,200 ريال لخدمات Google Cloud والسحابة',
-    parsedAction: {
-      actionType: 'record_expense',
-      amount: 4200,
-      currency: 'SAR',
-      category: 'software',
-      transactionId: 'tx-102',
-    },
-    status: 'processed',
-    syncLatencyMs: 18,
-  },
-  {
-    id: 'msg-02',
-    timestamp: new Date(Date.now() - 3600000 * 18).toISOString(),
-    channel: 'telegram',
-    sender: {
-      name: 'FinOS الوكيل المالي',
-      handle: '@TariqFin_Bot',
-      isAgent: true,
-    },
-    telegramThreadId: 101,
-    telegramTopicName: 'المالية والمصروفات',
-    content: '✅ تم توثيق المصروف فوراً عبر تليجرام!\n• المبلغ: 4,200 ريال سعودي\n• التصنيف: برمجيات وسحابة\n• المستهلك من ميزانية البرمجيات: 70%\n• تم المزامنة اللحظية مع لوحة تشغيل Tariq-AgentOS.',
-    status: 'delivered',
-    syncLatencyMs: 22,
-  },
-  {
-    id: 'msg-03',
-    timestamp: new Date(Date.now() - 3600000 * 8 - 45000).toISOString(),
-    channel: 'telegram',
-    sender: {
-      name: 'طارق المدير المالي',
-      handle: '@tariq_admin',
-      isAgent: false,
-    },
-    telegramThreadId: 101,
-    telegramTopicName: 'المالية والمصروفات',
-    content: '/expense 1950 ريال عشاء عمل مع وفد المستثمرين',
-    parsedAction: {
-      actionType: 'record_expense',
-      amount: 1950,
-      currency: 'SAR',
-      category: 'food_dining',
-      transactionId: 'tx-103',
-    },
-    status: 'processed',
-    syncLatencyMs: 15,
-  },
-  {
-    id: 'msg-04',
-    timestamp: new Date(Date.now() - 3600000 * 8).toISOString(),
-    channel: 'telegram',
-    sender: {
-      name: 'FinOS الوكيل المالي',
-      handle: '@TariqFin_Bot',
-      isAgent: true,
-    },
-    telegramThreadId: 101,
-    telegramTopicName: 'المالية والمصروفات',
-    content: '✅ تم تسجيل المصروف ومطابقته بالدفاتر.\n• الفئة: طعام وضيافة\n• المبلغ: 1,950 ريال\n• المتبقي في ميزانية الضيافة: 1,550 ريال\n• الحالة: آمن وضمن المعدل الطبيعي.',
-    status: 'delivered',
-    syncLatencyMs: 19,
-  },
-];
+const messagesStore: SyncedMessage[] = [];
 
 const tasksStore: AgentTask[] = [
   {
@@ -425,55 +243,24 @@ const tasksStore: AgentTask[] = [
     agentId: 'fin-agent-01',
     type: 'scheduled',
     status: 'completed',
-    lastRun: new Date(Date.now() - 3600000 * 5).toISOString(),
-    nextRun: new Date(Date.now() + 3600000 * 19).toISOString(),
-    details: 'فحص جميع المعاملات الواردة من تليجرام والويب للتأكد من حساب ضريبة الـ 15% بدقة.',
+    lastRun: new Date().toISOString(),
+    nextRun: 'مجدول تلقائياً',
+    details: 'فحص المعاملات الفعلية الواردة من تليجرام والويب لحساب ضريبة الـ 15% بدقة.',
   },
   {
     id: 'task-sync-watch',
-    title: 'مراقبة خط تزامن بوتات تليجرام مع الدفاتر',
-    titleEn: 'Telegram Bots Bi-directional Sync Stream',
-    agentId: 'orch-agent-02',
+    title: 'مراقبة خط تزامن بوت تليجرام المالي',
+    titleEn: 'Telegram Financial Bot Sync Stream',
+    agentId: 'fin-agent-01',
     type: 'event_driven',
     status: 'running',
-    lastRun: new Date(Date.now() - 60000 * 2).toISOString(),
+    lastRun: new Date().toISOString(),
     nextRun: 'مستمر (Active Stream)',
-    details: 'معالجة الـ Webhooks الواردة من تليجرام بمعدل استجابة يقل عن 25ms مع التحقق المشفر.',
-  },
-  {
-    id: 'task-budget-drift',
-    title: 'الكشف الاستباقي عن انحرافات الميزانية',
-    titleEn: 'Budget Variance & Anomaly Detection',
-    agentId: 'fin-agent-01',
-    type: 'scheduled',
-    status: 'scheduled',
-    lastRun: new Date(Date.now() - 3600000 * 12).toISOString(),
-    nextRun: new Date(Date.now() + 3600000 * 4).toISOString(),
-    details: 'إرسال تنبيهات تلقائية لمدير المالية عند وصول أي بند إلى 85% من المخصص الشهري.',
+    details: 'استلام الرسائل والقيود المالية الحقيقية من تليجرام والرد الفوري عليها.',
   },
 ];
 
-const auditLogsStore: SystemAuditLog[] = [
-  {
-    id: 'log-1',
-    timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    channel: 'telegram',
-    event: 'Webhook Auth & Transaction Processed',
-    ip: '185.199.108.153',
-    status: 'success',
-    tokenUsed: 'agt_live_tg_99a8...b1c0',
-    latencyMs: 18,
-  },
-  {
-    id: 'log-2',
-    timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    channel: 'web',
-    event: 'Ledger Synced & Budget Recomputed',
-    ip: '10.0.4.12',
-    status: 'success',
-    latencyMs: 9,
-  },
-];
+const auditLogsStore: SystemAuditLog[] = [];
 
 // Helper to update budget after transaction
 function adjustBudget(category: string, amount: number, isExpense: boolean) {
@@ -929,37 +716,36 @@ async function generateConversationalFinancialReply(
   const history = telegramConversationMemory.get(key) || [];
   const metrics = calculateCashFlowMetrics(transactionsStore);
 
-  const budgetsSnapshot = budgetsStore
-    .map((b) => {
-      const label = CATEGORY_LABELS_AR[b.category] || b.category;
-      const left = Math.max(0, b.allocated - b.spent);
-      return `${label}: مصروف ${b.spent.toLocaleString()} من ${b.allocated.toLocaleString()} ر.س (متبقي ${left.toLocaleString()} ر.س)`;
-    })
-    .join(' | ');
-
-  const recentTxSnapshot = transactionsStore
-    .slice(0, 4)
-    .map((t) => `${t.type === 'income' ? 'إيراد' : 'مصروف'} ${t.amount} ر.س (${t.description})`)
-    .join(' ، ');
+  const hasRealTransactions = transactionsStore.length > 0;
+  const recentTxSnapshot = hasRealTransactions
+    ? transactionsStore
+        .slice(0, 4)
+        .map((t) => `${t.type === 'income' ? 'إيراد' : 'مصروف'} ${t.amount} ر.س (${t.description})`)
+        .join(' ، ')
+    : 'لا توجد أي معاملات مسجلة حتى الآن';
 
   const conversationTranscript = history
     .slice(-10)
     .map((turn) => `${turn.role === 'user' ? `المستخدم (${senderName})` : 'أنت (الوكيل المالي)'}: ${turn.text}`)
     .join('\n');
 
+  const realDataContext = hasRealTransactions
+    ? `البيانات الفعلية التي سجلها المستخدم بنفسه حتى الآن:
+   - إجمالي الإيرادات الفعلية: ${metrics.totalIncome.toLocaleString()} ر.س
+   - إجمالي المصروفات الفعلية: ${metrics.totalExpense.toLocaleString()} ر.س
+   - صافي السيولة الفعلية: ${metrics.netCashFlow.toLocaleString()} ر.س
+   - المعاملات المسجلة: ${recentTxSnapshot}`
+    : `حالة السجل المالي حالياً: فارغ وجديد تماماً (0 معاملات مسجلة، لم يدخل المستخدم أي مبالغ أو مصاريف أو إيرادات بعد).`;
+
   const systemInstruction = `أنت "وكيل التحليل المالي" (@yosef0bot)، مستشار ومحاور مالي ذكي وطبيعي جداً تتحدث مع "${senderName}" عبر تليجرام.
-أهم قواعد أسلوبك:
+أهم قواعد أسلوبك الصارمة:
 1. تحدث بأسلوب بشري طبيعي، ودود، ذكي، وتفاعلي (خذ وأعطِ في الكلام كأنك مستشار مالي وصديق خبير يجلس معه).
-2. ممنوع تماماً إرسال قوالب آلية جاهزة أو قوائم أوامر متكررة مثل (/budget, /expense, /summary) إلا إذا طلب المستخدم صراحةً معرفة الأوامر.
-3. لست محصوراً أبداً في أوامر جامدة! يمكنك مناقشة أي فكرة، خطة مالية، تسعير، استثمار، توفير، دراسة جدوى، تحليل مصاريف، أو حتى الدردشة العامة والرد على أسئلته بمرونة وذكاء.
-4. لديك وصول مباشر وحقيقي لأرقام النظام الحالية عند الحاجة إليها:
-   - إجمالي الإيرادات: ${metrics.totalIncome.toLocaleString()} ر.س
-   - إجمالي المصروفات: ${metrics.totalExpense.toLocaleString()} ر.س
-   - صافي السيولة الحالية: ${metrics.netCashFlow.toLocaleString()} ر.س
-   - تفاصيل الميزانيات: ${budgetsSnapshot}
-   - آخر المعاملات: ${recentTxSnapshot}
-${actionExecutedSummary ? `5. ملاحظة هامة جداً: قمتَ للتو بتنفيذ العملية التالية في الدفاتر بناءً على رسالته: (${actionExecutedSummary}) — أكّد له ذلك بأسلوب طبيعي وحديث ودي دون قوالب رسمية جامدة.` : ''}
-اجعل ردك طبيعياً، مباشراً، ومترابطاً مع سياق الحديث السابق.`;
+2. ممنوع منعاً باتاً اختلاق أو ذكر أي أرقام أو مبالغ أو عقود أو رواتب أو صفقات أو مصاريف وهمية من خيالك! لا تذكر أي رقم أو عملية مالية إلا إذا كان المستخدم نفسه قد ذكرها لك في المحادثة أو سجلها فعلياً.
+3. ممنوع إرسال قوالب آلية جاهزة أو قوائم أوامر برمجية مثل (/budget, /expense, /summary) إلا إذا طلب المستخدم صراحةً معرفة الأوامر.
+4. يمكنك مناقشة أي فكرة، خطة مالية، تسعير، استثمار، توفير، دراسة جدوى، تحليل مصاريف، أو الإجابة عن أي سؤال يطرحه بمرونة وذكاء وصدق تام.
+5. ${realDataContext}
+${actionExecutedSummary ? `6. قمتَ للتو بتنفيذ العملية الحقيقية التالية بناءً على طلب المستخدم: (${actionExecutedSummary}) — أكّد له ذلك بأسلوب طبيعي وحديث ودي.` : ''}
+اجعل ردك طبيعياً، صادقاً 100% بدون أي أمثلة أو بيانات وهمية، ومترابطاً مع رسالته.`;
 
   const fullPrompt = conversationTranscript
     ? `سياق المحادثة السابقة:\n${conversationTranscript}\n\nرسالة المستخدم الجديدة (${senderName}): ${userMessage}`
@@ -985,7 +771,7 @@ ${actionExecutedSummary ? `5. ملاحظة هامة جداً: قمتَ للتو 
   if (!replyText) {
     replyText = actionExecutedSummary
       ? `تم طال عمرك! ${actionExecutedSummary}. قول لي، في بالك شيء ثاني نراجعه أو نحسبه سوا؟`
-      : `أبداً ماني محصور في أوامر محددة! أقدر آخذ وأعطي معك في أي موضوع مالي، نحسب جدوى أي فكرة في بالك، نرتب الميزانيات والسيولة، أو نسولف في أي استفسار عندك. وش اللي في خاطرك اليوم؟`;
+      : `أهلاً بك! أنا معك كمستشارك المالي، وجاهز نناقش أي فكرة أو خطة مالية أو نحسب أي أرقام حقيقية تطرحها بدون أي بيانات افتراضية. وش اللي في بالك نبدأ فيه؟`;
   }
 
   history.push({ role: 'user', text: userMessage });
