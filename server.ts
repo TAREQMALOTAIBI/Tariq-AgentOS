@@ -12,6 +12,7 @@ import {
   generateApiKey,
   validateApiKey,
   CATEGORY_LABELS_AR,
+  type ParsedFinancialIntent,
 } from './src/utils/finance-engine.ts';
 import { routeIncomingMessageToAgent } from './src/utils/agent-router.ts';
 import {
@@ -1591,70 +1592,158 @@ app.get('/api/telegram/webhook-info', async (_req, res) => {
 });
 
 
+// Multi-Agent Specialty Response Generator for Web Console
+async function generateAgentResponseBySpecialty(
+  agentId: string,
+  userMessage: string,
+  history: Array<{ role: string; text: string }> = []
+): Promise<{ reply: string; agentName: string }> {
+  const agent = agentsStore.find((a) => a.id === agentId) || agentsStore[0];
+
+  let systemInstruction = '';
+  if (agentId === 'mkt-agent-02') {
+    systemInstruction = `أنت "وكيل التسويق الرقمي" (MarketOS Bot) في منظومة Tariq-AgentOS.
+دورك: مستشار تسويقي محترف وخبير في إطلاق الحملات الإعلانية الممولة (سناب شات، تيك توك، جوجل، إنستغرام)، تحسين العائد على الإنفاق الإعلاني (ROAS)، تخفيض تكلفة الاستحواذ (CAC)، وصياغة الرسائل الإعلانية الجذابة.
+أسلوبك: تفاعلي، ذكي، مقنع، يطرح أفكاراً عملية وخطوات واضحة بالأرقام والنسب. تدرك أنك تعمل بتكامل مع الوكيل المالي (@yosef0bot) لطلب اعتمادات الميزانية.`;
+  } else if (agentId === 'sales-agent-03') {
+    systemInstruction = `أنت "وكيل المبيعات والصفقات" (SalesOS Bot) في منظومة Tariq-AgentOS.
+دورك: خبير إغلاق الصفقات، إدارة مسار المبيعات (Pipeline)، تأهيل العملاء المحتملين، صياغة عروض الأسعار التنافسية، والتعامل مع اعتراضات العملاء.
+أسلوبك: واثق، احترافي، يركز على القيمة، ويوضح كيفية تحويل الفرص إلى إيرادات مغلقة تمرر تلقائياً إلى الوكيل المالي.`;
+  } else if (agentId === 'orch-agent-04') {
+    systemInstruction = `أنت "منسق المهام والراوتر المركزي" (Kernel Dispatcher) في منظومة Tariq-AgentOS.
+دورك: نواة المنظومة الذكية، تحلل احتياجات المستخدم، توزع المهام بين الوكيل المالي (@yosef0bot)، وكيل التسويق (MarketOS)، ووكيل المبيعات (SalesOS)، وتقدم رؤية استراتيجية شمولية للأعمال.
+أسلوبك: تنظيمي، استراتيجي، يعطي خارطة طريق واضحة لكل قسم في الشركة.`;
+  } else {
+    systemInstruction = `أنت "وكيل التحليل المالي" (@yosef0bot) في منظومة Tariq-AgentOS، خبير ومستشار مالي يقدم استشارات مالية وإدارة نفقات ذكية ودقيقة.`;
+  }
+
+  const transcript = history
+    .slice(-8)
+    .map((turn) => `${turn.role === 'user' ? 'المستخدم' : agent.name}: ${turn.text}`)
+    .join('\n');
+
+  const fullPrompt = transcript
+    ? `سياق المحادثة:\n${transcript}\n\nرسالة المستخدم: ${userMessage}`
+    : `رسالة المستخدم: ${userMessage}`;
+
+  let replyText = '';
+  if (genAI) {
+    try {
+      const response = await genAI.models.generateContent({
+        model: 'gemini-3.1-flash-lite',
+        contents: fullPrompt,
+        config: {
+          systemInstruction,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+        },
+      });
+      replyText = (response.text || '').trim();
+    } catch (err) {
+      console.error(`Gemini error for agent ${agentId}:`, err);
+    }
+  }
+
+  // Intelligent fallback if Gemini was offline
+  if (!replyText) {
+    if (agentId === 'mkt-agent-02') {
+      replyText = `أهلاً بك! بصفتي وكيل التسويق الرقمي (MarketOS):
+لقد حللت استفسارك التسويقي بعناية. لتعظيم نتائج حملاتك ورفع معدل العائد (ROAS):
+1. **استهداف المنصات**: نوصي بالتركيز على تيك توك وسناب شات للفيديو القصير، وإعلانات جوجل للبحث المباشر.
+2. **صياغة العرض (Hook & Offer)**: التركيز على حل المشكلة فورياً في أول 3 ثوانٍ.
+3. **التكامل المالي**: سننسق الميزانية المطلوبة مباشرة مع الوكيل المالي في Tariq-AgentOS لضمان كفاءة الإنفاق.
+كيف ترغب في بدء صياغة الحملة أو حساب الميزانية المخصصة؟`;
+    } else if (agentId === 'sales-agent-03') {
+      replyText = `مرحباً بك! أنا وكيل المبيعات والصفقات (SalesOS):
+بخصوص استفسارك، إليك خطة العمل المباشرة لإتمام الصفقات:
+1. **تأهيل العميل**: التحقق من الميزانية، وصانع القرار، والجدول الزمني (BANT Framework).
+2. **عرض السعر**: صياغة عرض ذي قيمة واضحة يبرز العائد الاستثماري للعميل.
+3. **المتابعة والإغلاق**: جدولة نقاط اتصال محددة وإرسال نموذج الفاتورة الأولية للوكيل المالي لاعتمادها.
+هل نجهز عرض سعر محدد أو نناقش اعتراضات العميل الحالية؟`;
+    } else if (agentId === 'orch-agent-04') {
+      replyText = `أهلاً بك! بصفتي منسق المهام والراوتر المركزي (Kernel Dispatcher):
+استلمت طلبك وجارٍ توجيهه وتنسيقه عبر نواة Tariq-AgentOS:
+- **المسار المالي**: يُوجّه إلى الوكيل المالي (@yosef0bot) لفحص التدفقات والاعتمادات.
+- **مسار النمو**: يُوجّه إلى وكيل التسويق (MarketOS) لتوسيع نطاق الحملات.
+- **مسار الإيراد**: يُوجّه إلى وكيل المبيعات (SalesOS) لمتابعة التحويلات.
+كل الوكلاء متناغمون على نفس قاعدة البيانات. ما هي الخطوة ذات الأولوية القصوى لديك الآن؟`;
+    } else {
+      replyText = `مرحباً بك، أنا الوكيل المالي في Tariq-AgentOS. أنا جاهز لمساعدتك في تدقيق المصروفات، فحص الميزانية، وتسجيل المعاملات المالية ومزامنتها فوراً مع تليجرام.`;
+    }
+  }
+
+  return { reply: replyText, agentName: agent.name };
+}
+
 // 6. Agent Frontend Chat (Web Console)
 app.post('/api/agent/chat', async (req, res) => {
   const startTime = Date.now();
-  const { message = '', history = [] } = req.body;
+  const { message = '', history = [], agentId = 'fin-agent-01' } = req.body;
 
   if (!message.trim()) {
     res.status(400).json({ error: 'الرسالة مطلوبة' });
     return;
   }
 
-  // Multi-Agent Kernel Routing Check
-  const agentRouting = routeIncomingMessageToAgent(message, agentsStore);
-
-  // Parse financial intent
-  const intent = parseFinancialInput(message);
+  const selectedAgent = agentsStore.find((a) => a.id === agentId) || agentsStore[0];
   let agentReply = '';
   let createdTx: FinancialTransaction | null = null;
+  let intent: ParsedFinancialIntent = { action: 'general_query', confidence: 1 };
 
-  // Generate conversational response via Gemini (while still executing any recorded expense/income)
-  let actionSummary: string | undefined;
-  if (intent.action === 'record_expense' && intent.amount) {
-    createdTx = {
-      id: `tx-${Date.now().toString(36)}`,
-      timestamp: new Date().toISOString(),
-      type: 'expense',
-      amount: intent.amount,
-      currency: intent.currency || 'SAR',
-      category: intent.category || 'other',
-      merchantOrParty: intent.merchant || 'لوحة الويب - إدخال مباشر',
-      description: message,
-      source: 'web_frontend',
-      status: 'cleared',
-      agentNotes: 'تم تسجيل المعاملة مباشرة من خلال شات واجهة الويب.',
-      synced: true,
-    };
-    transactionsStore.unshift(createdTx);
-    adjustBudget(createdTx.category, createdTx.amount, true);
-    const catLabel = CATEGORY_LABELS_AR[createdTx.category] || createdTx.category;
-    actionSummary = `تم تسجيل مصروف ${intent.amount.toLocaleString()} ${intent.currency} في تصنيف ${catLabel}`;
-  } else if (intent.action === 'record_income' && intent.amount) {
-    createdTx = {
-      id: `tx-${Date.now().toString(36)}`,
-      timestamp: new Date().toISOString(),
-      type: 'income',
-      amount: intent.amount,
-      currency: intent.currency || 'SAR',
-      category: 'sales',
-      merchantOrParty: intent.merchant || 'إيراد مباشر',
-      description: message,
-      source: 'web_frontend',
-      status: 'cleared',
-      agentNotes: 'تم قيد الإيراد من واجهة المستخدم وتحديث الأرصدة.',
-      synced: true,
-    };
-    transactionsStore.unshift(createdTx);
-    actionSummary = `تم تسجيل إيراد +${intent.amount.toLocaleString()} ${intent.currency}`;
+  if (agentId === 'fin-agent-01') {
+    // Parse financial intent
+    intent = parseFinancialInput(message);
+
+    // Generate conversational response via Gemini (while still executing any recorded expense/income)
+    let actionSummary: string | undefined;
+    if (intent.action === 'record_expense' && intent.amount) {
+      createdTx = {
+        id: `tx-${Date.now().toString(36)}`,
+        timestamp: new Date().toISOString(),
+        type: 'expense',
+        amount: intent.amount,
+        currency: intent.currency || 'SAR',
+        category: intent.category || 'other',
+        merchantOrParty: intent.merchant || 'لوحة الويب - إدخال مباشر',
+        description: message,
+        source: 'web_frontend',
+        status: 'cleared',
+        agentNotes: 'تم تسجيل المعاملة مباشرة من خلال شات واجهة الويب.',
+        synced: true,
+      };
+      transactionsStore.unshift(createdTx);
+      adjustBudget(createdTx.category, createdTx.amount, true);
+      const catLabel = CATEGORY_LABELS_AR[createdTx.category] || createdTx.category;
+      actionSummary = `تم تسجيل مصروف ${intent.amount.toLocaleString()} ${intent.currency} في تصنيف ${catLabel}`;
+    } else if (intent.action === 'record_income' && intent.amount) {
+      createdTx = {
+        id: `tx-${Date.now().toString(36)}`,
+        timestamp: new Date().toISOString(),
+        type: 'income',
+        amount: intent.amount,
+        currency: intent.currency || 'SAR',
+        category: 'sales',
+        merchantOrParty: intent.merchant || 'إيراد مباشر',
+        description: message,
+        source: 'web_frontend',
+        status: 'cleared',
+        agentNotes: 'تم قيد الإيراد من واجهة المستخدم وتحديث الأرصدة.',
+        synced: true,
+      };
+      transactionsStore.unshift(createdTx);
+      actionSummary = `تم تسجيل إيراد +${intent.amount.toLocaleString()} ${intent.currency}`;
+    }
+
+    agentReply = await generateConversationalFinancialReply(
+      message,
+      'المستخدم',
+      'web-console',
+      actionSummary
+    );
+  } else {
+    // Specialist agent response
+    const agentRes = await generateAgentResponseBySpecialty(agentId, message, history);
+    agentReply = agentRes.reply;
   }
-
-  agentReply = await generateConversationalFinancialReply(
-    message,
-    'المستخدم',
-    'web-console',
-    actionSummary
-  );
 
   const latency = Date.now() - startTime;
 
@@ -1688,8 +1777,8 @@ app.post('/api/agent/chat', async (req, res) => {
     timestamp: new Date().toISOString(),
     channel: 'web',
     sender: {
-      name: 'وكيل التحليل المالي (FinOS)',
-      handle: 'fin-agent-01',
+      name: selectedAgent.name,
+      handle: selectedAgent.id,
       isAgent: true,
     },
     content: agentReply,
@@ -1698,8 +1787,40 @@ app.post('/api/agent/chat', async (req, res) => {
   };
   messagesStore.push(agMsg);
 
+  // Real-time two-way synchronization: forward message and agent reply to connected Telegram chat(s)
+  const finBot = connectedTelegramBots.get('fin-agent-01') || Array.from(connectedTelegramBots.values())[0];
+  if (finBot && finBot.activeChats && finBot.activeChats.length > 0) {
+    for (const chat of finBot.activeChats) {
+      try {
+        // Forward user's web message to Telegram
+        await fetch(`https://api.telegram.org/bot${finBot.botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chat.chatId,
+            text: `🌐 [رسالة من واجهة الموقع]:\n${message}`,
+          }),
+        }).catch(() => {});
+
+        // Forward agent's reply to Telegram
+        await fetch(`https://api.telegram.org/bot${finBot.botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chat.chatId,
+            text: `💼 [${selectedAgent.name}]:\n${agentReply}`,
+          }),
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Failed to sync message to Telegram:', err);
+      }
+    }
+  }
+
   res.json({
     reply: agentReply,
+    agentId: selectedAgent.id,
+    agentName: selectedAgent.name,
     parsedIntent: intent,
     createdTransaction: createdTx,
     updatedMetrics: calculateCashFlowMetrics(transactionsStore),
