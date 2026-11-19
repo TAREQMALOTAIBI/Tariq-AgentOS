@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import * as XLSX from 'xlsx';
 import {
   parseFinancialInput,
   calculateBudgetStatus,
@@ -37,7 +38,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+// Larger limit so the web console can upload files (base64) for the financial agent to analyze
+app.use(express.json({ limit: '30mb' }));
 
 // Initialize Gemini Client if key exists
 let genAI: GoogleGenAI | null = null;
@@ -707,14 +709,149 @@ const telegramConversationMemory = new Map<
   Array<{ role: 'user' | 'model'; text: string }>
 >();
 
+// -------------------------------------------------------------
+// FILE ATTACHMENTS (PDF, images, Excel, CSV, text) FOR THE FINANCIAL AGENT
+// -------------------------------------------------------------
+// A normalized attachment ready to be sent to Gemini.
+// - Binary formats Gemini understands natively (PDF, images) are sent as inlineData.
+// - Spreadsheets (xlsx/xls/ods) are converted to CSV text, because Gemini cannot read them directly.
+// - Plain-text formats (csv, txt, json, md...) are decoded and sent as text.
+interface AgentAttachment {
+  fileName: string;
+  mimeType: string;
+  inlineBase64?: string;
+  extractedText?: string;
+}
+
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // Telegram bot API download limit
+const MAX_EXTRACTED_TEXT_CHARS = 200_000;
+const GEMINI_INLINE_MIME_PREFIXES = ['image/', 'application/pdf', 'audio/', 'video/'];
+const SPREADSHEET_EXTENSIONS = ['xlsx', 'xlsm', 'xls', 'ods', 'xlsb'];
+const TEXT_EXTENSIONS = ['csv', 'tsv', 'txt', 'json', 'md', 'xml', 'html', 'htm', 'log'];
+
+// Last files received per chat, so follow-up questions ("حلل الملف", "كم المصروفات فيه؟") still see them
+const chatAttachmentMemory = new Map<string, AgentAttachment[]>();
+const MAX_REMEMBERED_ATTACHMENTS = 3;
+
+function getFileExtension(fileName: string): string {
+  const idx = fileName.lastIndexOf('.');
+  return idx >= 0 ? fileName.slice(idx + 1).toLowerCase() : '';
+}
+
+function truncateText(text: string): string {
+  return text.length > MAX_EXTRACTED_TEXT_CHARS
+    ? `${text.slice(0, MAX_EXTRACTED_TEXT_CHARS)}\n...[تم اقتطاع بقية الملف لكبر حجمه]`
+    : text;
+}
+
+function buildAttachmentFromBuffer(buffer: Buffer, fileName: string, mimeType?: string): AgentAttachment {
+  const ext = getFileExtension(fileName);
+  const mime = (mimeType || '').toLowerCase();
+
+  if (
+    SPREADSHEET_EXTENSIONS.includes(ext) ||
+    mime.includes('spreadsheet') ||
+    mime.includes('ms-excel')
+  ) {
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+    const sheetsText = workbook.SheetNames.map((name) => {
+      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name], { blankrows: false });
+      return `### ورقة: ${name}\n${csv}`;
+    }).join('\n\n');
+    return { fileName, mimeType: 'text/csv', extractedText: truncateText(sheetsText) };
+  }
+
+  if (TEXT_EXTENSIONS.includes(ext) || mime.startsWith('text/') || mime === 'application/json') {
+    return { fileName, mimeType: mime || 'text/plain', extractedText: truncateText(buffer.toString('utf8')) };
+  }
+
+  const MIME_BY_EXTENSION: Record<string, string> = {
+    pdf: 'application/pdf',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    heic: 'image/heic',
+  };
+  const effectiveMime = mime || MIME_BY_EXTENSION[ext] || '';
+  if (GEMINI_INLINE_MIME_PREFIXES.some((p) => effectiveMime.startsWith(p))) {
+    return { fileName, mimeType: effectiveMime, inlineBase64: buffer.toString('base64') };
+  }
+
+  throw new Error(
+    `صيغة الملف (${ext || mime || 'غير معروفة'}) غير مدعومة حالياً. الصيغ المدعومة: PDF، صور، Excel، CSV، ملفات نصية.`
+  );
+}
+
+// Downloads a document/photo attached to a Telegram message via getFile and converts it for Gemini
+async function extractTelegramAttachment(botToken: string, msg: any): Promise<AgentAttachment | null> {
+  let fileId: string | undefined;
+  let fileName = 'file';
+  let mimeType: string | undefined;
+  let fileSize: number | undefined;
+
+  if (msg.document) {
+    fileId = msg.document.file_id;
+    fileName = msg.document.file_name || 'document';
+    mimeType = msg.document.mime_type;
+    fileSize = msg.document.file_size;
+  } else if (Array.isArray(msg.photo) && msg.photo.length > 0) {
+    const largest = msg.photo[msg.photo.length - 1]; // Telegram sorts sizes ascending
+    fileId = largest.file_id;
+    fileName = 'photo.jpg';
+    mimeType = 'image/jpeg';
+    fileSize = largest.file_size;
+  }
+
+  if (!fileId) return null;
+  if (fileSize && fileSize > MAX_ATTACHMENT_BYTES) {
+    throw new Error('حجم الملف أكبر من 20 ميجابايت، وهو الحد الأقصى الذي يسمح تليجرام للبوتات بتحميله.');
+  }
+
+  const infoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
+  const info = await infoRes.json();
+  if (!info.ok || !info.result?.file_path) {
+    throw new Error('تعذر الحصول على الملف من خوادم تليجرام.');
+  }
+
+  const fileRes = await fetch(`https://api.telegram.org/file/bot${botToken}/${info.result.file_path}`);
+  if (!fileRes.ok) {
+    throw new Error('تعذر تحميل الملف من خوادم تليجرام.');
+  }
+  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  return buildAttachmentFromBuffer(buffer, fileName, mimeType);
+}
+
+// Converts files uploaded from the web console ({ fileName, mimeType, dataBase64 }) into attachments
+function parseWebAttachments(raw: unknown): AgentAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, MAX_REMEMBERED_ATTACHMENTS).map((item: any) => {
+    const buffer = Buffer.from(String(item?.dataBase64 || ''), 'base64');
+    if (buffer.length === 0) throw new Error('الملف المرفق فارغ.');
+    if (buffer.length > MAX_ATTACHMENT_BYTES) throw new Error('حجم الملف أكبر من 20 ميجابايت.');
+    return buildAttachmentFromBuffer(buffer, String(item?.fileName || 'file'), item?.mimeType);
+  });
+}
+
+function rememberAttachments(chatKey: string, newAttachments: AgentAttachment[]): AgentAttachment[] {
+  const existing = chatAttachmentMemory.get(chatKey) || [];
+  const merged = [...existing, ...newAttachments].slice(-MAX_REMEMBERED_ATTACHMENTS);
+  chatAttachmentMemory.set(chatKey, merged);
+  return merged;
+}
+
 async function generateConversationalFinancialReply(
   userMessage: string,
   senderName: string,
   chatKey: string | number,
-  actionExecutedSummary?: string
+  actionExecutedSummary?: string,
+  newAttachments: AgentAttachment[] = []
 ): Promise<string> {
   const key = String(chatKey);
   const history = telegramConversationMemory.get(key) || [];
+  const attachments = newAttachments.length > 0
+    ? rememberAttachments(key, newAttachments)
+    : chatAttachmentMemory.get(key) || [];
   const metrics = calculateCashFlowMetrics(transactionsStore);
 
   const hasRealTransactions = transactionsStore.length > 0;
@@ -746,18 +883,30 @@ async function generateConversationalFinancialReply(
 4. يمكنك مناقشة أي فكرة، خطة مالية، تسعير، استثمار، توفير، دراسة جدوى، تحليل مصاريف، أو الإجابة عن أي سؤال يطرحه بمرونة وذكاء وصدق تام.
 5. ${realDataContext}
 ${actionExecutedSummary ? `6. قمتَ للتو بتنفيذ العملية الحقيقية التالية بناءً على طلب المستخدم: (${actionExecutedSummary}) — أكّد له ذلك بأسلوب طبيعي وحديث ودي.` : ''}
+${attachments.length > 0 ? `7. أرسل لك المستخدم ملفات (${attachments.map((a) => a.fileName).join('، ')}) وهي مرفقة لك في هذه الرسالة. اقرأ محتواها فعلياً وحلّلها مالياً (إجماليات، إيرادات، مصروفات، أبرز البنود، ملاحظات ومخاطر، توصيات)، واعتمد فقط على الأرقام الموجودة في الملف. الأرقام الواردة في الملفات تعتبر بيانات حقيقية من المستخدم. إذا لم يذكر المستخدم طلباً محدداً فقدّم ملخصاً تحليلياً للملف.` : ''}
 اجعل ردك طبيعياً، صادقاً 100% بدون أي أمثلة أو بيانات وهمية، ومترابطاً مع رسالته.`;
 
   const fullPrompt = conversationTranscript
     ? `سياق المحادثة السابقة:\n${conversationTranscript}\n\nرسالة المستخدم الجديدة (${senderName}): ${userMessage}`
     : `رسالة المستخدم (${senderName}): ${userMessage}`;
 
+  // Build multimodal parts: the prompt text + every attached file (text-extracted or inline binary)
+  const parts: Array<Record<string, unknown>> = [{ text: fullPrompt }];
+  for (const att of attachments) {
+    if (att.extractedText !== undefined) {
+      parts.push({ text: `\n--- محتوى الملف المرفق: ${att.fileName} ---\n${att.extractedText}\n--- نهاية الملف ---` });
+    } else if (att.inlineBase64) {
+      parts.push({ text: `\n--- الملف المرفق: ${att.fileName} ---` });
+      parts.push({ inlineData: { mimeType: att.mimeType, data: att.inlineBase64 } });
+    }
+  }
+
   let replyText = '';
   if (genAI) {
     try {
       const response = await genAI.models.generateContent({
         model: 'gemini-3.1-flash-lite',
-        contents: fullPrompt,
+        contents: [{ role: 'user', parts }],
         config: {
           systemInstruction,
           thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
@@ -769,13 +918,22 @@ ${actionExecutedSummary ? `6. قمتَ للتو بتنفيذ العملية ال
     }
   }
 
+  if (!replyText && attachments.length > 0) {
+    replyText = genAI
+      ? 'استلمت الملف، لكن حصل خطأ أثناء تحليله. جرّب ترسله مرة ثانية بعد لحظات.'
+      : 'استلمت الملف، لكن خدمة التحليل الذكي غير مفعّلة (مفتاح GEMINI_API_KEY غير مضبوط على الخادم)، فما أقدر أقرأ محتواه حالياً.';
+  }
+
   if (!replyText) {
     replyText = actionExecutedSummary
       ? `تم طال عمرك! ${actionExecutedSummary}. قول لي، في بالك شيء ثاني نراجعه أو نحسبه سوا؟`
       : `أهلاً بك! أنا معك كمستشارك المالي، وجاهز نناقش أي فكرة أو خطة مالية أو نحسب أي أرقام حقيقية تطرحها بدون أي بيانات افتراضية. وش اللي في بالك نبدأ فيه؟`;
   }
 
-  history.push({ role: 'user', text: userMessage });
+  const historyUserText = newAttachments.length > 0
+    ? `${userMessage} [أرفق ملف: ${newAttachments.map((a) => a.fileName).join('، ')}]`
+    : userMessage;
+  history.push({ role: 'user', text: historyUserText });
   history.push({ role: 'model', text: replyText });
   if (history.length > 24) {
     history.splice(0, history.length - 24);
@@ -791,9 +949,27 @@ async function generateTelegramAgentReply(
   fromHandle: string,
   chatId: number,
   _threadId?: number,
-  _boundAgentId?: string
+  _boundAgentId?: string,
+  attachments: AgentAttachment[] = []
 ): Promise<{ replyText: string; createdTx: FinancialTransaction | null; targetAgentName: string; activeAgentId: string }> {
   const trimmed = text.trim();
+
+  // A file was sent: analyze it instead of trying to parse the caption as a single transaction
+  if (attachments.length > 0) {
+    const replyText = await generateConversationalFinancialReply(
+      trimmed || 'حلّل هذا الملف مالياً وأعطني ملخصاً واضحاً.',
+      senderName,
+      chatId,
+      undefined,
+      attachments
+    );
+    return {
+      replyText,
+      createdTx: null,
+      targetAgentName: 'وكيل التحليل المالي (FinOS Bot)',
+      activeAgentId: 'fin-agent-01',
+    };
+  }
 
   // Reject switching to other agents if someone clicks an old button
   if (trimmed.startsWith('/switch_')) {
@@ -952,13 +1128,34 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
 
           // Handle standard text messages sent inside Telegram app
           const msg = update.message || update.edited_message;
-          if (!msg || !msg.text) continue;
+          const hasFile = !!(msg?.document || (Array.isArray(msg?.photo) && msg.photo.length > 0));
+          if (!msg || (!msg.text && !hasFile)) continue;
 
           const chatId: number = msg.chat.id;
           const threadId: number | undefined = msg.message_thread_id;
           const senderName: string = msg.from?.first_name || msg.chat?.title || 'مشرف تليجرام';
           const fromHandle: string = msg.from?.username ? `@${msg.from.username}` : `tg_${msg.from?.id || chatId}`;
-          const text: string = msg.text;
+          // Files arrive with an optional caption instead of text
+          const text: string = msg.text || msg.caption || '';
+
+          let attachments: AgentAttachment[] = [];
+          if (hasFile) {
+            try {
+              const att = await extractTelegramAttachment(botEntry.botToken, msg);
+              if (att) attachments = [att];
+            } catch (fileErr: any) {
+              await fetch(`https://api.telegram.org/bot${botEntry.botToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: chatId,
+                  ...(threadId ? { message_thread_id: threadId } : {}),
+                  text: `⚠️ ما قدرت أقرأ الملف: ${fileErr?.message || 'خطأ غير معروف'}`,
+                }),
+              }).catch(() => {});
+              continue;
+            }
+          }
 
           // Record active Telegram chat
           const existingChat = botEntry.activeChats.find((c) => c.chatId === chatId);
@@ -1016,7 +1213,8 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
             fromHandle,
             chatId,
             threadId,
-            botEntry.agentId
+            botEntry.agentId,
+            attachments
           );
 
           botEntry.messagesProcessed += 1;
@@ -1065,16 +1263,7 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
 
           const showInlineMenu = text.trim() === '/menu' || text.trim() === '/commands';
 
-          await fetch(`https://api.telegram.org/bot${botEntry.botToken}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chatId,
-              ...(threadId ? { message_thread_id: threadId } : {}),
-              text: replyText,
-              ...(showInlineMenu ? { reply_markup: buildTelegramInlineKeyboard() } : {}),
-            }),
-          });
+          await sendLongTelegramMessage(botEntry.botToken, chatId, threadId, replyText, showInlineMenu);
         }
       }
     }
@@ -1087,6 +1276,41 @@ async function pollSingleBotUpdates(botEntry: ConnectedTelegramBot) {
     }
   }
 }
+
+// Telegram rejects messages over 4096 chars; file analyses are often longer, so split them
+async function sendLongTelegramMessage(
+  botToken: string,
+  chatId: number,
+  threadId: number | undefined,
+  text: string,
+  showInlineMenu = false
+) {
+  const LIMIT = 4000;
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > LIMIT) {
+    let cut = remaining.lastIndexOf('\n', LIMIT);
+    if (cut < LIMIT / 2) cut = LIMIT;
+    chunks.push(remaining.slice(0, cut));
+    remaining = remaining.slice(cut).replace(/^\n+/, '');
+  }
+  chunks.push(remaining);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        ...(threadId ? { message_thread_id: threadId } : {}),
+        text: chunks[i],
+        ...(isLast && showInlineMenu ? { reply_markup: buildTelegramInlineKeyboard() } : {}),
+      }),
+    }).catch(() => {});
+  }
+}
+
 
 // Get status of all connected real Telegram bots
 app.get('/api/telegram/bots', (req, res) => {
@@ -1469,7 +1693,8 @@ app.post('/api/telegram/webhook', async (req, res) => {
 
   // Case B: Handle Text Message
   const msg = update.message || update.edited_message;
-  if (!msg || !msg.text) {
+  const hasFile = !!(msg?.document || (Array.isArray(msg?.photo) && msg.photo.length > 0));
+  if (!msg || (!msg.text && !hasFile)) {
     // Fallback if someone sends synthetic payload
     if (req.body.text) {
       await handleChannelWebhook(req, res, 'telegram');
@@ -1483,7 +1708,19 @@ app.post('/api/telegram/webhook', async (req, res) => {
   const threadId: number | undefined = msg.message_thread_id;
   const senderName: string = msg.from?.first_name || msg.chat?.title || 'مستخدم تليجرام';
   const fromHandle: string = msg.from?.username ? `@${msg.from.username}` : `tg_${msg.from?.id || chatId}`;
-  const text: string = msg.text;
+  const text: string = msg.text || msg.caption || '';
+
+  let attachments: AgentAttachment[] = [];
+  if (hasFile) {
+    try {
+      const att = await extractTelegramAttachment(token, msg);
+      if (att) attachments = [att];
+    } catch (fileErr: any) {
+      await sendLongTelegramMessage(token, chatId, threadId, `⚠️ ما قدرت أقرأ الملف: ${fileErr?.message || 'خطأ غير معروف'}`);
+      res.json({ ok: true, message: 'File could not be processed' });
+      return;
+    }
+  }
 
   const { replyText, createdTx, targetAgentName } = await generateTelegramAgentReply(
     text,
@@ -1491,7 +1728,8 @@ app.post('/api/telegram/webhook', async (req, res) => {
     fromHandle,
     chatId,
     threadId,
-    'fin-agent-01'
+    'fin-agent-01',
+    attachments
   );
 
   const latency = Date.now() - startTime;
@@ -1555,16 +1793,7 @@ app.post('/api/telegram/webhook', async (req, res) => {
 
   // Reply back to user via Telegram Bot API
   const showInlineMenu = text.trim() === '/menu' || text.trim() === '/commands';
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      ...(threadId ? { message_thread_id: threadId } : {}),
-      text: replyText,
-      ...(showInlineMenu ? { reply_markup: buildTelegramInlineKeyboard() } : {}),
-    }),
-  }).catch(() => {});
+  await sendLongTelegramMessage(token, chatId, threadId, replyText, showInlineMenu);
 
   res.json({
     ok: true,
@@ -1677,9 +1906,17 @@ async function generateAgentResponseBySpecialty(
 // 6. Agent Frontend Chat (Web Console)
 app.post('/api/agent/chat', async (req, res) => {
   const startTime = Date.now();
-  const { message = '', history = [], agentId = 'fin-agent-01' } = req.body;
+  const { message = '', history = [], agentId = 'fin-agent-01', attachments: rawAttachments } = req.body;
 
-  if (!message.trim()) {
+  let webAttachments: AgentAttachment[] = [];
+  try {
+    webAttachments = parseWebAttachments(rawAttachments);
+  } catch (fileErr: any) {
+    res.status(400).json({ error: fileErr?.message || 'تعذر قراءة الملف المرفق' });
+    return;
+  }
+
+  if (!message.trim() && webAttachments.length === 0) {
     res.status(400).json({ error: 'الرسالة مطلوبة' });
     return;
   }
@@ -1689,7 +1926,16 @@ app.post('/api/agent/chat', async (req, res) => {
   let createdTx: FinancialTransaction | null = null;
   let intent: ParsedFinancialIntent = { action: 'general_query', confidence: 1 };
 
-  if (agentId === 'fin-agent-01') {
+  if (agentId === 'fin-agent-01' && webAttachments.length > 0) {
+    // Uploaded file(s): let the financial agent read and analyze them
+    agentReply = await generateConversationalFinancialReply(
+      message.trim() || 'حلّل هذا الملف مالياً وأعطني ملخصاً واضحاً.',
+      'المستخدم',
+      'web-console',
+      undefined,
+      webAttachments
+    );
+  } else if (agentId === 'fin-agent-01') {
     // Parse financial intent
     intent = parseFinancialInput(message);
 
@@ -1757,7 +2003,9 @@ app.post('/api/agent/chat', async (req, res) => {
       handle: 'admin@agentos.local',
       isAgent: false,
     },
-    content: message,
+    content: webAttachments.length > 0
+      ? `📎 ${webAttachments.map((a) => a.fileName).join('، ')}${message.trim() ? `\n${message}` : ''}`
+      : message,
     parsedAction: createdTx
       ? {
           actionType: createdTx.type === 'expense' ? 'record_expense' : 'record_income',
@@ -1798,19 +2046,12 @@ app.post('/api/agent/chat', async (req, res) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chat_id: chat.chatId,
-            text: `🌐 [رسالة من واجهة الموقع]:\n${message}`,
+            text: `🌐 [رسالة من واجهة الموقع]:\n${userMsg.content}`,
           }),
         }).catch(() => {});
 
-        // Forward agent's reply to Telegram
-        await fetch(`https://api.telegram.org/bot${finBot.botToken}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chat.chatId,
-            text: `💼 [${selectedAgent.name}]:\n${agentReply}`,
-          }),
-        }).catch(() => {});
+        // Forward agent's reply to Telegram (split if longer than Telegram's limit)
+        await sendLongTelegramMessage(finBot.botToken, chat.chatId, undefined, `💼 [${selectedAgent.name}]:\n${agentReply}`);
       } catch (err) {
         console.error('Failed to sync message to Telegram:', err);
       }
