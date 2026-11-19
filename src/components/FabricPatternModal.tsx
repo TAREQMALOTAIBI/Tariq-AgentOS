@@ -155,7 +155,7 @@ cat financial_report.txt | fabric --pattern analyze_financial`;
                 <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
                   <strong>تم تفعيل هذا النمط رسمياً في Tariq-AgentOS:</strong>
-                  يستخدم وكيل التحليل المالي (<code className="text-white font-mono">@yosef0bot</code>) في تليجرام وفي لوحة التشغيل هذا النمط كـ System Prompt دقيق لمعالجة الأسئلة المالية وكشف تسريبات النقد وتحليل القوائم المالية.
+                  يستخدم وكيل التحليل المالي (<code className="text-white font-mono">@Financial_Analyst_511_bot</code>) في تليجرام وفي لوحة التشغيل هذا النمط كـ System Prompt دقيق لمعالجة الأسئلة المالية وكشف تسريبات النقد وتحليل القوائم المالية.
                 </div>
               </div>
 
@@ -226,7 +226,7 @@ cat financial_report.txt | fabric --pattern analyze_financial`;
                     <strong>LangChain / CrewAI / AutoGen:</strong> عيّن النمط كـ <code className="text-purple-300 font-mono">role_description</code> أو <code className="text-purple-300 font-mono">system_message</code> لوكيلك المالي.
                   </li>
                   <li>
-                    <strong>منظومة Tariq-AgentOS:</strong> النمط مدمج ومفعل افتراضياً لوكيل التحليل المالي المتصل بـ <code className="text-white font-mono">@yosef0bot</code>.
+                    <strong>منظومة Tariq-AgentOS:</strong> النمط مدمج ومفعل افتراضياً لوكيل التحليل المالي المتصل بـ <code className="text-white font-mono">@Financial_Analyst_511_bot</code>.
                   </li>
                 </ul>
               </div>

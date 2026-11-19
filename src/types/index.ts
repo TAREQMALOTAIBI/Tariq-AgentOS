@@ -84,6 +84,14 @@ export interface ApiKeyItem {
   botUsername?: string;
 }
 
+export interface PdfAttachment {
+  name: string;
+  size: number;
+  type: string;
+  base64: string;
+  extractedSummary?: string;
+}
+
 export interface SyncedMessage {
   id: string;
   timestamp: string;
@@ -103,6 +111,10 @@ export interface SyncedMessage {
   telegramThreadId?: number;
   telegramTopicName?: string;
   content: string;
+  pdfAttachment?: {
+    name: string;
+    size: number;
+  };
   parsedAction?: {
     actionType: string;
     amount?: number;

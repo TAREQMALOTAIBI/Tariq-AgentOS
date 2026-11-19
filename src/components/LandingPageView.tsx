@@ -14,6 +14,7 @@ import {
   ExternalLink,
   ChevronLeft
 } from 'lucide-react';
+import { Logo } from './Logo';
 import type { AgentProfile } from '../types/index';
 
 interface LandingPageViewProps {
@@ -44,6 +45,14 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         <div className="absolute bottom-0 left-10 -z-10 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
 
         <div className="max-w-4xl mx-auto text-center space-y-6">
+          {/* Logo Emblem Showcase */}
+          <div className="flex justify-center mb-1">
+            <div className="relative group cursor-pointer" onClick={() => onEnterChat()}>
+              <div className="absolute -inset-2 rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 opacity-40 blur-xl group-hover:opacity-75 transition duration-500" />
+              <Logo size="lg" showText={false} className="relative transform group-hover:scale-105 transition-transform duration-300" />
+            </div>
+          </div>
+
           {/* Top Kicker */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -79,15 +88,15 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               className="w-full sm:w-auto px-6 py-4 rounded-xl bg-purple-950/60 hover:bg-purple-900/60 text-purple-200 border border-purple-500/40 font-semibold text-sm transition-all shadow-lg shadow-purple-950/40 hover:-translate-y-0.5 flex items-center justify-center gap-2 cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-purple-400" />
-              <span>📜 نمط Fabric المالي</span>
+              <span>📜 نمط Fabric</span>
             </button>
 
             <a
-              href={`tg://resolve?domain=${finAgent?.telegramBotUsername || 'yosef0bot'}&start=landing`}
+              href={`tg://resolve?domain=${finAgent?.telegramBotUsername || 'Financial_Analyst_511_bot'}&start=landing`}
               className="w-full sm:w-auto px-5 py-4 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-sky-400 border border-sky-500/30 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Send className="w-4 h-4" />
-              <span>فتح @yosef0bot بتليجرام</span>
+              <span>فتح في تليجرام</span>
             </a>
           </div>
 
@@ -95,7 +104,11 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <div className="pt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>محادثات فورية ذكية (Gemini 3.1)</span>
+              <span>محادثات فورية ذكية</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>تحليل فواتير ومستندات PDF</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -146,7 +159,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
 
               <div>
                 <h3 className="text-base font-bold text-white group-hover:text-emerald-300 transition-colors">
-                  وكيل التحليل المالي (@yosef0bot)
+                  وكيل التحليل المالي (@Financial_Analyst_511_bot)
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
                   إدارة العمليات المالية والتدفقات النقدية والميزانيات وفواتير تليجرام وحساب ضريبة 15%.
@@ -156,7 +169,11 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               <div className="space-y-1.5 pt-2 border-t border-slate-800 text-[11px] text-slate-300">
                 <div className="flex items-center gap-1.5">
                   <span className="text-emerald-400">✓</span>
-                  <span>تسجيل المصروفات والإيرادات</span>
+                  <span>إرفاق وتحليل فواتير PDF واستخراج الضريبة</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-emerald-400">✓</span>
+                  <span>تسجيل المصروفات والإيرادات والميزانية</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-emerald-400">✓</span>
@@ -342,7 +359,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 w-fit border border-purple-500/20">
             <Sparkles className="w-5 h-5" />
           </div>
-          <h3 className="text-base font-bold text-white">نمط Fabric المالي المعتمد</h3>
+          <h3 className="text-base font-bold text-white">نمط Fabric المعتمد</h3>
           <p className="text-xs text-slate-300 leading-relaxed">
             موجهات ذكية مدمجة مستوحاة من نمط Fabric لتحليل السيولة، اكتشاف الهدر المالي، وتقديم توصيات استثمارية استباقية.
           </p>

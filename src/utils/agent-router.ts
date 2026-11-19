@@ -306,11 +306,11 @@ export interface TelegramAgentPreset {
 export const TELEGRAM_AGENT_PRESETS: TelegramAgentPreset[] = [
   {
     id: 'fin-agent-01',
-    name: 'وكيل التحليل المالي (@yosef0bot)',
-    nameEn: 'Financial Analysis Bot (@yosef0bot)',
+    name: 'وكيل التحليل المالي (@Financial_Analyst_511_bot)',
+    nameEn: 'Financial Analysis Bot (@Financial_Analyst_511_bot)',
     avatar: '💼',
     specialty: 'finance',
-    botUsername: 'yosef0bot',
+    botUsername: 'Financial_Analyst_511_bot',
     topicThreadId: 101,
     topicName: 'المالية والمصروفات',
     prefix: '#مالية',

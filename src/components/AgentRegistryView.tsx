@@ -334,7 +334,7 @@ export const AgentRegistryView: React.FC<AgentRegistryViewProps> = ({
               {/* Bottom Actions */}
               <div className="pt-4 border-t border-slate-800/80 mt-4 flex items-center justify-between gap-2 relative z-10">
                 <a
-                  href={`tg://resolve?domain=yosef0bot&start=agent_${ag.specialty}`}
+                  href={`tg://resolve?domain=${ag.telegramBotUsername || 'Financial_Analyst_511_bot'}&start=agent_${ag.specialty}`}
                   className="w-full py-2 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-sky-500/20"
                 >
                   <span>فتح محادثة الوكيل في تليجرام</span>

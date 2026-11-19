@@ -56,7 +56,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             title="عرض ونسخ نمط Fabric للتحليل المالي"
           >
             <Sparkles className="w-4 h-4 text-purple-300" />
-            <span>📜 نمط Fabric المالي</span>
+            <span>📜 نمط Fabric</span>
           </button>
         </div>
       </div>
@@ -113,7 +113,7 @@ export const CockpitView: React.FC<CockpitViewProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <a
-                href={`tg://resolve?domain=${finAgent?.telegramBotUsername || 'yosef0bot'}&start=agent_finance`}
+                href={`tg://resolve?domain=${finAgent?.telegramBotUsername || 'Financial_Analyst_511_bot'}&start=agent_finance`}
                 className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-sky-500/20 whitespace-nowrap"
               >
                 <Send className="w-3.5 h-3.5" />

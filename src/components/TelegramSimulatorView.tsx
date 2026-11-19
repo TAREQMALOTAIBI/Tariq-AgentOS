@@ -103,7 +103,7 @@ export const TelegramSimulatorView: React.FC<TelegramSimulatorProps> = ({
     }
   };
 
-  const activeBotUsername = connectedBots[0]?.botUsername || 'yosef0bot';
+  const activeBotUsername = connectedBots[0]?.botUsername || 'Financial_Analyst_511_bot';
   const telegramSyncedLogs = messages.filter(
     (m) => m.channel === 'telegram' && !m.sender.isAgent
   );

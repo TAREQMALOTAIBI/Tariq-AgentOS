@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Send,
 } from 'lucide-react';
+import { Logo } from './Logo';
 
 interface HeaderProps {
   activeTab: string;
@@ -77,16 +78,10 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="px-4 py-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <button
           onClick={() => setActiveTab('landing')}
-          className="flex items-center gap-3 cursor-pointer text-right group"
+          className="cursor-pointer group flex items-center transition-transform hover:opacity-95"
+          title="العودة للصفحة الرئيسية"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/10 border border-emerald-400/30 group-hover:scale-105 transition-transform">
-            <Cpu className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-tight group-hover:text-emerald-300 transition-colors">
-              Tariq-AgentOS
-            </h1>
-          </div>
+          <Logo size="md" />
         </button>
 
         {/* View Switcher Tabs */}
