@@ -13,7 +13,9 @@ import {
   Zap,
   TrendingUp,
   RotateCcw,
-  Wifi
+  Wifi,
+  Paperclip,
+  X
 } from 'lucide-react';
 import type { AgentProfile, FinancialTransaction, SyncedMessage } from '../types/index';
 import { formatSafeTime } from '../utils/formatters';
@@ -49,6 +51,16 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+
+  const readFileAsBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
 
   // Per-agent message history stores
   const [conversations, setConversations] = useState<Record<string, Message[]>>({
@@ -205,12 +217,13 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
 
   const handleSend = async (messageText?: string) => {
     const textToSend = messageText || input;
-    if (!textToSend.trim() || isLoading) return;
+    const fileToSend = messageText ? null : pendingFile;
+    if ((!textToSend.trim() && !fileToSend) || isLoading) return;
 
     const userMessage: Message = {
       id: `usr-${Date.now()}`,
       sender: 'user',
-      text: textToSend,
+      text: fileToSend ? `📎 ${fileToSend.name}${textToSend.trim() ? `\n${textToSend}` : ''}` : textToSend,
       timestamp: formatSafeTime(new Date().toISOString()),
     };
 
@@ -221,10 +234,15 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
     }));
 
     setInput('');
+    setPendingFile(null);
     setIsLoading(true);
-    setLoadingStep('تحليل الاستفسار وتوليد الرد الذكي...');
+    setLoadingStep(fileToSend ? 'قراءة الملف وتحليله مالياً...' : 'تحليل الاستفسار وتوليد الرد الذكي...');
 
     try {
+      const attachments = fileToSend
+        ? [{ fileName: fileToSend.name, mimeType: fileToSend.type, dataBase64: await readFileAsBase64(fileToSend) }]
+        : undefined;
+
       const historyPayload = currentMessages.slice(-6).map((m) => ({
         role: m.sender === 'user' ? 'user' : 'model',
         text: m.text,
@@ -237,6 +255,7 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
           message: textToSend,
           agentId: selectedAgentId,
           history: historyPayload,
+          attachments,
         }),
       });
 
@@ -512,7 +531,41 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
         </div>
 
         {/* Input Bar */}
+        {pendingFile && (
+          <div className="px-4 pt-2 bg-slate-950 flex items-center gap-2 text-[11px] text-slate-300">
+            <Paperclip className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="truncate">{pendingFile.name}</span>
+            <button
+              onClick={() => setPendingFile(null)}
+              className="text-slate-500 hover:text-white cursor-pointer"
+              aria-label="إزالة الملف"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <div className="p-3 md:p-4 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.xlsx,.xls,.xlsm,.ods,.csv,.tsv,.txt,.json,image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) setPendingFile(f);
+              e.target.value = '';
+            }}
+          />
+          {selectedAgentId === 'fin-agent-01' && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+              title="إرفاق ملف (PDF، Excel، CSV، صورة)"
+              className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 transition-colors disabled:opacity-40 cursor-pointer"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+          )}
           <input
             type="text"
             value={input}
@@ -530,7 +583,7 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
 
           <button
             onClick={() => handleSend()}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || (!input.trim() && !pendingFile)}
             className="px-4 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs md:text-sm transition-all shadow-md shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
           >
             <Send className="w-4 h-4 text-slate-950" />
