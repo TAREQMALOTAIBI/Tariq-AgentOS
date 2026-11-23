@@ -4,7 +4,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, FileState } from '@google/genai';
 import * as XLSX from 'xlsx';
 import {
   parseFinancialInput,
@@ -721,6 +721,7 @@ interface AgentAttachment {
   mimeType: string;
   inlineBase64?: string;
   extractedText?: string;
+  fileUri?: string; // set once the file has been uploaded to the Gemini Files API
 }
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024; // Telegram bot API download limit
@@ -840,6 +841,92 @@ function rememberAttachments(chatKey: string, newAttachments: AgentAttachment[])
   return merged;
 }
 
+// Files above this size are uploaded through the Gemini Files API instead of being embedded in the
+// request: big base64 payloads hit request-size limits and make PDF analysis fail.
+const INLINE_ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
+const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+
+async function toGeminiFilePart(att: AgentAttachment): Promise<Record<string, unknown>> {
+  if (!att.inlineBase64 && !att.fileUri) {
+    throw new Error(`الملف ${att.fileName} فارغ.`);
+  }
+  const rawBytes = att.inlineBase64 ? Math.floor((att.inlineBase64.length * 3) / 4) : 0;
+  if (!att.fileUri && rawBytes <= INLINE_ATTACHMENT_MAX_BYTES) {
+    return { inlineData: { mimeType: att.mimeType, data: att.inlineBase64 } };
+  }
+
+  if (!att.fileUri) {
+    const uploaded = await genAI!.files.upload({
+      file: new Blob([Buffer.from(att.inlineBase64!, 'base64')], { type: att.mimeType }),
+      config: { mimeType: att.mimeType, displayName: att.fileName },
+    });
+    // PDFs/videos are processed asynchronously; wait until the file is ready to be used
+    let file = uploaded;
+    for (let i = 0; i < 30 && file.state === FileState.PROCESSING && file.name; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      file = await genAI!.files.get({ name: file.name });
+    }
+    if (file.state === FileState.FAILED || !file.uri) {
+      throw new Error('فشلت معالجة الملف على خوادم Gemini.');
+    }
+    att.fileUri = file.uri; // cached: follow-up questions reuse the upload
+  }
+  return { fileData: { fileUri: att.fileUri, mimeType: att.mimeType } };
+}
+
+function describeGeminiError(err: any): string {
+  const status = err?.status ?? err?.code;
+  const msg = String(err?.message || err || '');
+  if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(msg)) return 'تم تجاوز حد الاستخدام لمفتاح Gemini (Quota). انتظر قليلاً أو راجع الحصة في Google AI Studio.';
+  if (status === 503 || /UNAVAILABLE|overloaded/i.test(msg)) return 'خوادم Gemini مشغولة حالياً.';
+  if (status === 413 || /too large|payload size|exceeds/i.test(msg)) return 'حجم الملف أكبر من المسموح.';
+  if (/password|encrypted/i.test(msg)) return 'الملف محمي بكلمة مرور.';
+  if (status === 400) return `Gemini رفض الطلب: ${msg.slice(0, 200)}`;
+  if (status === 401 || status === 403) return 'مفتاح Gemini غير صالح أو لا يملك صلاحية.';
+  return msg.slice(0, 200) || 'خطأ غير معروف';
+}
+
+function isRetryableGeminiError(err: any): boolean {
+  const status = err?.status ?? err?.code;
+  return [429, 500, 503, 504].includes(status) || /UNAVAILABLE|overloaded|INTERNAL|DEADLINE/i.test(String(err?.message || ''));
+}
+
+// Calls Gemini with a short retry on transient errors, then falls back to a second model
+async function generateWithRetry(
+  parts: Array<Record<string, unknown>>,
+  systemInstruction: string
+): Promise<{ text: string; failureReason: string }> {
+  let failureReason = '';
+  const models = [...new Set([GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL])];
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await genAI!.models.generateContent({
+          model,
+          contents: [{ role: 'user', parts }],
+          config: {
+            systemInstruction,
+            ...(model.startsWith('gemini-3') ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
+          },
+        });
+        const text = (response.text || '').trim();
+        if (text) return { text, failureReason: '' };
+        const finish = response.candidates?.[0]?.finishReason || response.promptFeedback?.blockReason;
+        failureReason = `Gemini أعاد رداً فارغاً${finish ? ` (${finish})` : ''}.`;
+        console.error(`Gemini empty response from ${model}:`, finish);
+        break; // empty/blocked response: try the next model
+      } catch (err: any) {
+        console.error(`Gemini error from ${model} (attempt ${attempt + 1}):`, err);
+        failureReason = describeGeminiError(err);
+        if (!isRetryableGeminiError(err)) break;
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      }
+    }
+  }
+  return { text: '', failureReason };
+}
+
 async function generateConversationalFinancialReply(
   userMessage: string,
   senderName: string,
@@ -890,37 +977,34 @@ ${attachments.length > 0 ? `7. أرسل لك المستخدم ملفات (${atta
     ? `سياق المحادثة السابقة:\n${conversationTranscript}\n\nرسالة المستخدم الجديدة (${senderName}): ${userMessage}`
     : `رسالة المستخدم (${senderName}): ${userMessage}`;
 
-  // Build multimodal parts: the prompt text + every attached file (text-extracted or inline binary)
-  const parts: Array<Record<string, unknown>> = [{ text: fullPrompt }];
-  for (const att of attachments) {
-    if (att.extractedText !== undefined) {
-      parts.push({ text: `\n--- محتوى الملف المرفق: ${att.fileName} ---\n${att.extractedText}\n--- نهاية الملف ---` });
-    } else if (att.inlineBase64) {
-      parts.push({ text: `\n--- الملف المرفق: ${att.fileName} ---` });
-      parts.push({ inlineData: { mimeType: att.mimeType, data: att.inlineBase64 } });
-    }
-  }
-
   let replyText = '';
+  let failureReason = '';
   if (genAI) {
     try {
-      const response = await genAI.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
-        contents: [{ role: 'user', parts }],
-        config: {
-          systemInstruction,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
-        },
-      });
-      replyText = (response.text || '').trim();
-    } catch (err) {
+      // Build multimodal parts: the prompt text + every attached file (text, inline binary, or uploaded file)
+      const parts: Array<Record<string, unknown>> = [{ text: fullPrompt }];
+      for (const att of attachments) {
+        if (att.extractedText !== undefined) {
+          parts.push({ text: `\n--- محتوى الملف المرفق: ${att.fileName} ---\n${att.extractedText}\n--- نهاية الملف ---` });
+        } else {
+          parts.push({ text: `\n--- الملف المرفق: ${att.fileName} ---` });
+          parts.push(await toGeminiFilePart(att));
+        }
+      }
+      const result = await generateWithRetry(parts, systemInstruction);
+      replyText = result.text;
+      failureReason = result.failureReason;
+    } catch (err: any) {
       console.error('Gemini conversational error:', err);
+      failureReason = describeGeminiError(err);
     }
   }
 
   if (!replyText && attachments.length > 0) {
+    // Forget the files that failed so they don't break every following message in this chat
+    chatAttachmentMemory.delete(key);
     replyText = genAI
-      ? 'استلمت الملف، لكن حصل خطأ أثناء تحليله. جرّب ترسله مرة ثانية بعد لحظات.'
+      ? `استلمت الملف، لكن حصل خطأ أثناء تحليله.\nالسبب: ${failureReason || 'غير معروف'}\nجرّب ترسله مرة ثانية بعد لحظات.`
       : 'استلمت الملف، لكن خدمة التحليل الذكي غير مفعّلة (مفتاح GEMINI_API_KEY غير مضبوط على الخادم)، فما أقدر أقرأ محتواه حالياً.';
   }
 
