@@ -845,7 +845,7 @@ function rememberAttachments(chatKey: string, newAttachments: AgentAttachment[])
 // request: big base64 payloads hit request-size limits and make PDF analysis fail.
 const INLINE_ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
 const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 
 async function toGeminiFilePart(att: AgentAttachment): Promise<Record<string, unknown>> {
   if (!att.inlineBase64 && !att.fileUri) {
@@ -883,6 +883,7 @@ function describeGeminiError(err: any): string {
   if (status === 413 || /too large|payload size|exceeds/i.test(msg)) return 'حجم الملف أكبر من المسموح.';
   if (/password|encrypted/i.test(msg)) return 'الملف محمي بكلمة مرور.';
   if (status === 400) return `Gemini رفض الطلب: ${msg.slice(0, 200)}`;
+  if (status === 404 || /not found|no longer available/i.test(msg)) return `النموذج غير متاح: ${msg.slice(0, 200)}`;
   if (status === 401 || status === 403) return 'مفتاح Gemini غير صالح أو لا يملك صلاحية.';
   return msg.slice(0, 200) || 'خطأ غير معروف';
 }
@@ -897,9 +898,11 @@ async function generateWithRetry(
   parts: Array<Record<string, unknown>>,
   systemInstruction: string
 ): Promise<{ text: string; failureReason: string }> {
-  let failureReason = '';
+  // Keep each model's own error: the primary model's reason is the one that explains the problem
+  const reasons: string[] = [];
   const models = [...new Set([GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL])];
   for (const model of models) {
+    let failureReason = '';
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await genAI!.models.generateContent({
@@ -923,8 +926,9 @@ async function generateWithRetry(
         await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
       }
     }
+    if (failureReason) reasons.push(`${model}: ${failureReason}`);
   }
-  return { text: '', failureReason };
+  return { text: '', failureReason: reasons.join('\n') };
 }
 
 async function generateConversationalFinancialReply(
