@@ -847,6 +847,22 @@ const INLINE_ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
 const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 
+// The hosting platform cuts requests after 5 minutes, so every Gemini step is time-boxed and the whole
+// retry loop must finish well before that, guaranteeing the user always gets an answer.
+const GEMINI_CALL_TIMEOUT_MS = 70_000;
+const GEMINI_TOTAL_BUDGET_MS = 150_000;
+const GEMINI_UPLOAD_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`timeout: ${label}`)), ms);
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 async function toGeminiFilePart(att: AgentAttachment): Promise<Record<string, unknown>> {
   if (!att.inlineBase64 && !att.fileUri) {
     throw new Error(`الملف ${att.fileName} فارغ.`);
@@ -857,27 +873,32 @@ async function toGeminiFilePart(att: AgentAttachment): Promise<Record<string, un
   }
 
   if (!att.fileUri) {
-    const uploaded = await genAI!.files.upload({
-      file: new Blob([Buffer.from(att.inlineBase64!, 'base64')], { type: att.mimeType }),
-      config: { mimeType: att.mimeType, displayName: att.fileName },
-    });
-    // PDFs/videos are processed asynchronously; wait until the file is ready to be used
-    let file = uploaded;
-    for (let i = 0; i < 30 && file.state === FileState.PROCESSING && file.name; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      file = await genAI!.files.get({ name: file.name });
-    }
-    if (file.state === FileState.FAILED || !file.uri) {
-      throw new Error('فشلت معالجة الملف على خوادم Gemini.');
-    }
-    att.fileUri = file.uri; // cached: follow-up questions reuse the upload
+    att.fileUri = await withTimeout(uploadToGeminiFiles(att), GEMINI_UPLOAD_TIMEOUT_MS, 'file upload');
   }
   return { fileData: { fileUri: att.fileUri, mimeType: att.mimeType } };
+}
+
+async function uploadToGeminiFiles(att: AgentAttachment): Promise<string> {
+  const uploaded = await genAI!.files.upload({
+    file: new Blob([Buffer.from(att.inlineBase64!, 'base64')], { type: att.mimeType }),
+    config: { mimeType: att.mimeType, displayName: att.fileName },
+  });
+  // PDFs/videos are processed asynchronously; wait until the file is ready to be used
+  let file = uploaded;
+  for (let i = 0; i < 30 && file.state === FileState.PROCESSING && file.name; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    file = await genAI!.files.get({ name: file.name });
+  }
+  if (file.state === FileState.FAILED || !file.uri) {
+    throw new Error('فشلت معالجة الملف على خوادم Gemini.');
+  }
+  return file.uri; // cached on the attachment: follow-up questions reuse the upload
 }
 
 function describeGeminiError(err: any): string {
   const status = err?.status ?? err?.code;
   const msg = String(err?.message || err || '');
+  if (/timeout|timed out|aborted/i.test(msg)) return 'انتهت مهلة انتظار رد Gemini (الخدمة بطيئة حالياً).';
   if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(msg)) return 'تم تجاوز حد الاستخدام لمفتاح Gemini (Quota). انتظر قليلاً أو راجع الحصة في Google AI Studio.';
   if (status === 503 || /UNAVAILABLE|overloaded/i.test(msg)) return 'خوادم Gemini مشغولة حالياً.';
   if (status === 413 || /too large|payload size|exceeds/i.test(msg)) return 'حجم الملف أكبر من المسموح.';
@@ -890,7 +911,7 @@ function describeGeminiError(err: any): string {
 
 function isRetryableGeminiError(err: any): boolean {
   const status = err?.status ?? err?.code;
-  return [429, 500, 503, 504].includes(status) || /UNAVAILABLE|overloaded|INTERNAL|DEADLINE/i.test(String(err?.message || ''));
+  return [429, 500, 503, 504].includes(status) || /UNAVAILABLE|overloaded|INTERNAL|DEADLINE|timeout|timed out|aborted|fetch failed/i.test(String(err?.message || ''));
 }
 
 // Calls Gemini with a short retry on transient errors, then falls back to a second model
@@ -902,18 +923,25 @@ async function generateWithRetry(
   const reasons: string[] = [];
   // true while every failure so far was temporary (busy servers, quota, network) and not caused by the file
   let transient = true;
+  const deadline = Date.now() + GEMINI_TOTAL_BUDGET_MS;
   const models = [...new Set([GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL])];
   for (const model of models) {
     let failureReason = '';
     // MINIMAL thinking is only accepted by the lite models; others get the API default
     let useMinimalThinking = model.includes('flash-lite');
     for (let attempt = 0; attempt < 3; attempt++) {
+      const remaining = deadline - Date.now();
+      if (remaining < 10_000) {
+        failureReason = failureReason || 'انتهت مهلة انتظار رد Gemini (الخدمة بطيئة حالياً).';
+        break;
+      }
       try {
         const response = await genAI!.models.generateContent({
           model,
           contents: [{ role: 'user', parts }],
           config: {
             systemInstruction,
+            httpOptions: { timeout: Math.min(GEMINI_CALL_TIMEOUT_MS, remaining) },
             ...(useMinimalThinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
           },
         });
@@ -931,13 +959,15 @@ async function generateWithRetry(
           useMinimalThinking = false; // model rejected the thinking setting: retry right away without it
           continue;
         }
+        // A model that timed out is unlikely to answer faster on retry: give the time to the next model
+        if (/timeout|timed out|aborted/i.test(String(err?.message || ''))) break;
         if (!isRetryableGeminiError(err)) {
           // A missing/retired model or a rejected setting is our config, not the file
           const status = err?.status ?? err?.code;
           if (status !== 404 && !/thinking|model/i.test(String(err?.message || ''))) transient = false;
           break;
         }
-        if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+        if (attempt < 2 && deadline - Date.now() > 15_000) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
       }
     }
     if (failureReason) reasons.push(`${model}: ${failureReason}`);

@@ -248,8 +248,12 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
         text: m.text,
       }));
 
+      // The server answers within ~3 minutes at most; don't let the UI hang longer than that
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 200_000);
       const res = await fetch('/api/agent/chat', {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: textToSend,
@@ -259,7 +263,22 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
         }),
       });
 
-      const data = await res.json();
+      clearTimeout(timeoutId);
+
+      // Non-JSON replies come from the hosting layer (timeout page, body too large...), not from the agent
+      let data: any;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? 'حجم الملف أكبر من الحد المسموح به على الخادم.'
+            : `الخادم لم يرد برد صالح (HTTP ${res.status}).`
+        );
+      }
+      if (!res.ok && !data.reply) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
 
       const agentMessage: Message = {
         id: `agt-${Date.now()}`,
@@ -288,7 +307,10 @@ export const AgentChatStudio: React.FC<AgentChatStudioProps> = ({
           {
             id: `err-${Date.now()}`,
             sender: 'agent',
-            text: 'حدث خطأ مؤقت أثناء الاتصال بالوكيل. يرجى إعادة المحاولة.',
+            text:
+              (err as any)?.name === 'AbortError'
+                ? 'انتهت مهلة انتظار رد الوكيل. أعد سؤالك بعد لحظات — الملف محفوظ عند الوكيل.'
+                : `حدث خطأ أثناء الاتصال بالوكيل: ${(err as any)?.message || 'غير معروف'}`,
             timestamp: formatSafeTime(new Date().toISOString()),
             agentId: selectedAgentId,
             agentName: activeAgent.name,
