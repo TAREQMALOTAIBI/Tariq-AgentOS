@@ -903,14 +903,16 @@ async function generateWithRetry(
   const models = [...new Set([GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL])];
   for (const model of models) {
     let failureReason = '';
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // MINIMAL thinking is only accepted by the lite models; others get the API default
+    let useMinimalThinking = model.includes('flash-lite');
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const response = await genAI!.models.generateContent({
           model,
           contents: [{ role: 'user', parts }],
           config: {
             systemInstruction,
-            ...(model.startsWith('gemini-3') ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
+            ...(useMinimalThinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
           },
         });
         const text = (response.text || '').trim();
@@ -922,8 +924,12 @@ async function generateWithRetry(
       } catch (err: any) {
         console.error(`Gemini error from ${model} (attempt ${attempt + 1}):`, err);
         failureReason = describeGeminiError(err);
+        if (useMinimalThinking && /thinking/i.test(String(err?.message || ''))) {
+          useMinimalThinking = false; // model rejected the thinking setting: retry right away without it
+          continue;
+        }
         if (!isRetryableGeminiError(err)) break;
-        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
       }
     }
     if (failureReason) reasons.push(`${model}: ${failureReason}`);
