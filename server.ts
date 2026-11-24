@@ -897,9 +897,11 @@ function isRetryableGeminiError(err: any): boolean {
 async function generateWithRetry(
   parts: Array<Record<string, unknown>>,
   systemInstruction: string
-): Promise<{ text: string; failureReason: string }> {
+): Promise<{ text: string; failureReason: string; transient: boolean }> {
   // Keep each model's own error: the primary model's reason is the one that explains the problem
   const reasons: string[] = [];
+  // true while every failure so far was temporary (busy servers, quota, network) and not caused by the file
+  let transient = true;
   const models = [...new Set([GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL])];
   for (const model of models) {
     let failureReason = '';
@@ -916,10 +918,11 @@ async function generateWithRetry(
           },
         });
         const text = (response.text || '').trim();
-        if (text) return { text, failureReason: '' };
+        if (text) return { text, failureReason: '', transient: false };
         const finish = response.candidates?.[0]?.finishReason || response.promptFeedback?.blockReason;
         failureReason = `Gemini أعاد رداً فارغاً${finish ? ` (${finish})` : ''}.`;
         console.error(`Gemini empty response from ${model}:`, finish);
+        transient = false;
         break; // empty/blocked response: try the next model
       } catch (err: any) {
         console.error(`Gemini error from ${model} (attempt ${attempt + 1}):`, err);
@@ -928,13 +931,18 @@ async function generateWithRetry(
           useMinimalThinking = false; // model rejected the thinking setting: retry right away without it
           continue;
         }
-        if (!isRetryableGeminiError(err)) break;
+        if (!isRetryableGeminiError(err)) {
+          // A missing/retired model or a rejected setting is our config, not the file
+          const status = err?.status ?? err?.code;
+          if (status !== 404 && !/thinking|model/i.test(String(err?.message || ''))) transient = false;
+          break;
+        }
         if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
       }
     }
     if (failureReason) reasons.push(`${model}: ${failureReason}`);
   }
-  return { text: '', failureReason: reasons.join('\n') };
+  return { text: '', failureReason: reasons.join('\n'), transient };
 }
 
 async function generateConversationalFinancialReply(
@@ -989,6 +997,7 @@ ${attachments.length > 0 ? `7. أرسل لك المستخدم ملفات (${atta
 
   let replyText = '';
   let failureReason = '';
+  let transientFailure = false;
   if (genAI) {
     try {
       // Build multimodal parts: the prompt text + every attached file (text, inline binary, or uploaded file)
@@ -1004,18 +1013,30 @@ ${attachments.length > 0 ? `7. أرسل لك المستخدم ملفات (${atta
       const result = await generateWithRetry(parts, systemInstruction);
       replyText = result.text;
       failureReason = result.failureReason;
+      transientFailure = result.transient;
     } catch (err: any) {
       console.error('Gemini conversational error:', err);
       failureReason = describeGeminiError(err);
+      transientFailure = isRetryableGeminiError(err);
     }
   }
 
   if (!replyText && attachments.length > 0) {
-    // Forget the files that failed so they don't break every following message in this chat
-    chatAttachmentMemory.delete(key);
-    replyText = genAI
-      ? `استلمت الملف، لكن حصل خطأ أثناء تحليله.\nالسبب: ${failureReason || 'غير معروف'}\nجرّب ترسله مرة ثانية بعد لحظات.`
-      : 'استلمت الملف، لكن خدمة التحليل الذكي غير مفعّلة (مفتاح GEMINI_API_KEY غير مضبوط على الخادم)، فما أقدر أقرأ محتواه حالياً.';
+    if (!transientFailure) {
+      // The file itself was rejected: forget it so it doesn't break every following message in this chat.
+      // Only drop the newly sent files; earlier files that already worked stay available.
+      if (newAttachments.length > 0) {
+        const kept = (chatAttachmentMemory.get(key) || []).filter((a) => !newAttachments.includes(a));
+        chatAttachmentMemory.set(key, kept);
+      } else {
+        chatAttachmentMemory.delete(key);
+      }
+    }
+    replyText = !genAI
+      ? 'استلمت الملف، لكن خدمة التحليل الذكي غير مفعّلة (مفتاح GEMINI_API_KEY غير مضبوط على الخادم)، فما أقدر أقرأ محتواه حالياً.'
+      : transientFailure
+        ? `ما قدرت أحلل الملف الحين لأن خدمة Gemini مشغولة مؤقتاً.\nالسبب: ${failureReason || 'غير معروف'}\nالملف محفوظ عندي، ما تحتاج ترسله مرة ثانية — أعد سؤالك بعد لحظات.`
+        : `استلمت الملف، لكن ما قدرت أقرأه.\nالسبب: ${failureReason || 'غير معروف'}\nتأكد إن الملف سليم وغير محمي بكلمة مرور ثم أرسله مرة ثانية.`;
   }
 
   if (!replyText) {
